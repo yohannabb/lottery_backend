@@ -198,6 +198,21 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 }, storage });
 
+// --- USER PROFILE ENDPOINT ---
+app.get('/api/users/:telegramId', async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    const user = await User.findOne({ telegramId });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // --- LOTTERY MANAGEMENT ENDPOINTS ---
 
 // GET: Fetch Active Car Lotteries
@@ -349,7 +364,7 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
     if (lotteryId && mongoose.Types.ObjectId.isValid(lotteryId)) {
       await Lottery.findByIdAndUpdate(lotteryId, { 
         $inc: { soldTickets: Number(ticketCount), remainingTickets: -Number(ticketCount) },
-        $push: { takenNumbers: { $each: parsedNumbers } }
+        $push: { takenNumbers: {$each: parsedNumbers } }
       });
     }
 
