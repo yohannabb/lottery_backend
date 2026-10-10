@@ -409,7 +409,7 @@ if (!MONGO_URI) {
 }
 
 mongoose.connect(MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log('✅ MongoDB connected successfully');
     
     // Bind explicitly to '0.0.0.0' for Railway routing
@@ -417,11 +417,17 @@ mongoose.connect(MONGO_URI)
       console.log(`🚀 API running and listening on port ${PORT}`);
     });
 
-    // Start bot safely with conflict catching
-    bot.start().catch(err => {
-      console.warn('⚠️ Telegram Bot polling notice:', err.message);
-    });
-    console.log('🤖 Telegram Bot process initialized...');
+    // Start bot safely with try/catch to protect against 409 conflict crashes
+    try {
+      console.log('🤖 Starting Telegram Bot polling...');
+      await bot.start({
+        onStart: (botInfo) => {
+          console.log(`✨ Bot connected successfully as @${botInfo.username}`);
+        }
+      });
+    } catch (err) {
+      console.warn('⚠️ Telegram Bot startup warning (another instance might be running):', err.message);
+    }
   })
   .catch(err => {
     console.error('❌ DB Connection Error:', err);
