@@ -139,7 +139,7 @@ bot.on('message:contact', async (ctx) => {
     const user = await User.findOneAndUpdate(
       { telegramId },
       { phoneNumber, isRegistered: true },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     const lang = user ? user.language : 'en';
@@ -398,7 +398,7 @@ app.get('/api/tickets/user-tickets', async (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// 3. Server Startup & Database Connection (CRITICAL FIX FOR RAILWAY)
+// 3. Server Startup & Database Connection
 // ------------------------------------------------------------------
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
@@ -412,13 +412,16 @@ mongoose.connect(MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected successfully');
     
-    // Bind to '0.0.0.0' so Railway can proxy incoming traffic successfully
+    // Bind explicitly to '0.0.0.0' for Railway routing
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 API running and listening on port ${PORT}`);
     });
 
-    bot.start();
-    console.log('🤖 Telegram Bot running...');
+    // Start bot safely with conflict catching
+    bot.start().catch(err => {
+      console.warn('⚠️ Telegram Bot polling notice:', err.message);
+    });
+    console.log('🤖 Telegram Bot process initialized...');
   })
   .catch(err => {
     console.error('❌ DB Connection Error:', err);
