@@ -45,13 +45,12 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
 
 if (!BOT_TOKEN || BOT_TOKEN === 'your_telegram_bot_token_here') {
-  console.error('\n❌ ERROR: Please paste your real Telegram Bot Token inside server/.env!');
-  console.error('👉 Set TELEGRAM_BOT_TOKEN=your_token_from_botfather\n');
+  console.error('\n❌ ERROR: Please configure your real Telegram Bot Token in Railway Variables!');
   process.exit(1);
 }
 
 const bot = new Bot(BOT_TOKEN);
-const MINI_APP_URL = process.env.MINI_APP_URL || 'https://your-webapp-url.com';
+const MINI_APP_URL = process.env.MINI_APP_URL || 'https://gechocarekub.netlify.app';
 
 bot.catch((err) => {
   console.error(`❌ Bot Error (${err.ctx.update.update_id}):`, err.error);
@@ -215,7 +214,6 @@ app.get('/api/users/:telegramId', async (req, res) => {
 
 // --- LOTTERY MANAGEMENT ENDPOINTS ---
 
-// GET: Fetch Active Car Lotteries
 app.get('/api/lotteries', async (req, res) => {
   try {
     const lotteries = await Lottery.find().sort({ createdAt: -1 });
@@ -226,12 +224,10 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
-// POST: Add New Car Lottery (Admin Dashboard)
 app.post('/api/lotteries', async (req, res) => {
   try {
     const { title, color, imageUrl, ticketPrice, totalTickets, durationDays, isFeatured } = req.body;
     
-    // Calculate End Date based on durationDays (Default: 30 days)
     const days = Number(durationDays) || 30;
     const endDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
@@ -243,7 +239,7 @@ app.post('/api/lotteries', async (req, res) => {
       totalTickets: Number(totalTickets),
       remainingTickets: Number(totalTickets),
       soldTickets: 0,
-      takenNumbers: [], // Clean free numbers for new car
+      takenNumbers: [],
       endDate,
       isFeatured: isFeatured ?? true
     });
@@ -273,7 +269,7 @@ app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
     const ticket = await Ticket.findOneAndUpdate(
       { orderId: req.params.orderId },
       { status: 'APPROVED' },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!ticket) {
@@ -303,7 +299,7 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
     const ticket = await Ticket.findOneAndUpdate(
       { orderId: req.params.orderId },
       { status: 'REJECTED' },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!ticket) {
@@ -360,7 +356,6 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
 
     await newTicket.save();
 
-    // Increment sold count & push selected numbers to takenNumbers array
     if (lotteryId && mongoose.Types.ObjectId.isValid(lotteryId)) {
       await Lottery.findByIdAndUpdate(lotteryId, { 
         $inc: { soldTickets: Number(ticketCount), remainingTickets: -Number(ticketCount) },
@@ -403,16 +398,29 @@ app.get('/api/tickets/user-tickets', async (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// 3. Server Startup & Database Connection
+// 3. Server Startup & Database Connection (CRITICAL FIX FOR RAILWAY)
 // ------------------------------------------------------------------
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
+if (!MONGO_URI) {
+  console.error('❌ FATAL ERROR: MONGO_URI environment variable is missing!');
+  process.exit(1);
+}
+
 mongoose.connect(MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected successfully');
-    app.listen(PORT, () => console.log(`🚀 API running on port ${PORT}`));
+    
+    // Bind to '0.0.0.0' so Railway can proxy incoming traffic successfully
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 API running and listening on port ${PORT}`);
+    });
+
     bot.start();
     console.log('🤖 Telegram Bot running...');
   })
-  .catch(err => console.error('❌ DB Connection Error:', err));
+  .catch(err => {
+    console.error('❌ DB Connection Error:', err);
+    process.exit(1);
+  });
