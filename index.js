@@ -88,8 +88,45 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
     const selectedLang = ctx.match[1];
     const telegramId = String(ctx.from.id);
 
-    await User.findOneAndUpdate({ telegramId }, { language: selectedLang });
+    const user = await User.findOneAndUpdate(
+      { telegramId }, 
+      { language: selectedLang },
+      { returnDocument: 'after' }
+    );
     await ctx.answerCallbackQuery();
+
+    const botUsername = ctx.me.username;
+    const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%20our%20Car%20Lottery!`;
+
+    const appBtnTexts = {
+      or: '🚗 App Banadhu',
+      am: '🚗 መተግበሪያውን ክፈት',
+      en: '🚗 Getachew Fikadu app'
+    };
+
+    const inviteBtnTexts = {
+      or: '✉️ Hiriyoota affeeri',
+      am: '✉️ ጓደኞችን ይጋብዙ',
+      en: '✉️ Invite friends'
+    };
+
+    // PROFESSIONAL CHECK: If user is already registered with a phone number, skip asking for contact!
+    if (user && user.phoneNumber && user.isRegistered) {
+      const welcomeBackMsgs = {
+        or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
+        am: '👋 እንኳን ደስ ብሎዎት! መተግበሪያውን ከታች ይክፈቱ።',
+        en: '👋 Welcome back! Open the app below.'
+      };
+
+      const inlineKeyboard = new InlineKeyboard()
+        .webApp(appBtnTexts[selectedLang], MINI_APP_URL).row()
+        .url(inviteBtnTexts[selectedLang], inviteLink);
+
+      await ctx.reply(welcomeBackMsgs[selectedLang], {
+        reply_markup: inlineKeyboard
+      });
+      return;
+    }
 
     const prompts = {
       or: 'Maaloo lakkoofsa bilbilaa keessan ergaa.',
@@ -337,7 +374,6 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
     const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
     const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
 
-    // Fallback phone number if empty to prevent Mongoose validation error
     const validPhoneNumber = (phoneNumber && phoneNumber.trim() !== '') ? phoneNumber : '+251900000000';
 
     const newTicket = new Ticket({
@@ -413,12 +449,10 @@ mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log('✅ MongoDB connected successfully');
     
-    // Bind explicitly to '0.0.0.0' for Railway routing
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 API running and listening on port ${PORT}`);
     });
 
-    // Start bot asynchronously in the background so polling conflicts never crash Express or trigger 502s
     console.log('🤖 Starting Telegram Bot polling...');
     bot.start({
       onStart: (botInfo) => {
