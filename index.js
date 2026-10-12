@@ -110,7 +110,7 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
       en: '✉️ Invite friends'
     };
 
-    // PROFESSIONAL CHECK: If user is already registered with a phone number, skip asking for contact!
+    // If user already has a phone number saved, skip asking for contact again!
     if (user && user.phoneNumber && user.isRegistered) {
       const welcomeBackMsgs = {
         or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
@@ -158,10 +158,11 @@ bot.on('message:contact', async (ctx) => {
     const telegramId = String(ctx.from.id);
     const phoneNumber = ctx.message.contact.phone_number;
 
+    // Immediately save phone number to user profile
     const user = await User.findOneAndUpdate(
       { telegramId },
       { phoneNumber, isRegistered: true },
-      { returnDocument: 'after' }
+      { upsert: true, returnDocument: 'after' }
     );
 
     const lang = user ? user.language : 'en';
@@ -235,6 +236,25 @@ app.get('/api/users/:telegramId', async (req, res) => {
     res.json({ success: true, user });
   } catch (error) {
     console.error('Error fetching user profile:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.patch('/api/users/:telegramId', async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    const { phoneNumber } = req.body;
+    const user = await User.findOneAndUpdate(
+      { telegramId: String(telegramId) },
+      { phoneNumber, isRegistered: true },
+      { returnDocument: 'after' }
+    );
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
