@@ -38,7 +38,7 @@ const bot = new Bot(BOT_TOKEN);
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://gechocarekub.netlify.app';
 
 bot.catch((err) => {
-  console.error(`❌ Bot Error (${err.ctx.update.update_id}):`, err.error);
+  console.error(`❌ Bot Error (${err.ctx?.update?.update_id || 'unknown'}):`, err.error);
 });
 
 // ------------------------------------------------------------------
@@ -182,6 +182,11 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 }, storage });
 
+// --- HEALTH CHECK ROUTE ---
+app.get('/', (req, res) => {
+  res.json({ success: true, message: 'Car Lottery Backend is live!' });
+});
+
 // --- USER PROFILE ENDPOINT ---
 app.get('/api/users/:telegramId', async (req, res) => {
   try {
@@ -250,7 +255,6 @@ app.post('/api/lotteries', async (req, res) => {
 
 app.get('/api/admin/tickets', async (req, res) => {
   try {
-    // Fetch tickets safely without crashing if references fail
     const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
     res.json({ success: true, tickets });
   } catch (error) {
@@ -411,17 +415,15 @@ mongoose.connect(MONGO_URI)
       console.log(`🚀 API running and listening on port ${PORT}`);
     });
 
-    // Start bot safely with try/catch to protect against 409 conflict crashes
-    try {
-      console.log('🤖 Starting Telegram Bot polling...');
-      await bot.start({
-        onStart: (botInfo) => {
-          console.log(`✨ Bot connected successfully as @${botInfo.username}`);
-        }
-      });
-    } catch (err) {
-      console.warn('⚠️ Telegram Bot startup warning (another instance might be running):', err.message);
-    }
+    // Start bot asynchronously in the background so polling conflicts never crash Express or trigger 502s
+    console.log('🤖 Starting Telegram Bot polling...');
+    bot.start({
+      onStart: (botInfo) => {
+        console.log(`✨ Bot connected successfully as @${botInfo.username}`);
+      }
+    }).catch((err) => {
+      console.warn('⚠️ Telegram background polling conflict/warning (App stays online):', err.message);
+    });
   })
   .catch(err => {
     console.error('❌ DB Connection Error:', err);
