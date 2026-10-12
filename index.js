@@ -250,7 +250,8 @@ app.post('/api/lotteries', async (req, res) => {
 
 app.get('/api/admin/tickets', async (req, res) => {
   try {
-    const tickets = await Ticket.find().populate('lotteryId').sort({ createdAt: -1 });
+    // Fetch tickets safely without crashing if references fail
+    const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
     res.json({ success: true, tickets });
   } catch (error) {
     console.error('Error fetching admin tickets:', error);
