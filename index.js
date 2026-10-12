@@ -337,12 +337,15 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
     const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
     const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
 
+    // Fallback phone number if empty to prevent Mongoose validation error
+    const validPhoneNumber = (phoneNumber && phoneNumber.trim() !== '') ? phoneNumber : '+251900000000';
+
     const newTicket = new Ticket({
       orderId,
       lotteryId,
       telegramId: String(telegramId),
       fullName,
-      phoneNumber,
+      phoneNumber: validPhoneNumber,
       selectedNumbers: parsedNumbers,
       isQuickPick: isQuickPick === 'true',
       ticketCount: Number(ticketCount),
@@ -365,7 +368,7 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
       const adminMsg = 
         `🚨 *New Ticket Order Submitted*\n\n` +
         `👤 *Name:* ${fullName}\n` +
-        `📞 *Phone:* ${phoneNumber}\n` +
+        `📞 *Phone:* ${validPhoneNumber}\n` +
         `🎫 *Ticket Numbers:* ${parsedNumbers.join(', ') || 'Random'}\n` +
         `💰 *Total:* ${totalPrice} Birr\n` +
         `🆔 *Order ID:* #${orderId}`;
