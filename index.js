@@ -10,22 +10,7 @@ const { Bot, InlineKeyboard, Keyboard } = require('grammy');
 // Mongoose Models
 const User = require('./models/User');
 const Ticket = require('./models/Ticket');
-
-// Updated Lottery Schema with Expiration / Countdown support
-const lotterySchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  color: { type: String, required: true },
-  imageUrl: { type: String, required: true },
-  ticketPrice: { type: Number, required: true },
-  totalTickets: { type: Number, required: true },
-  soldTickets: { type: Number, default: 0 },
-  remainingTickets: { type: Number },
-  endDate: { type: Date, required: true },
-  takenNumbers: { type: [Number], default: [] },
-  isFeatured: { type: Boolean, default: true }
-}, { timestamps: true });
-
-const Lottery = mongoose.models.Lottery || mongoose.model('Lottery', lotterySchema);
+const Lottery = require('./models/Lottery');
 
 // Initialize Express App
 const app = express();
@@ -68,8 +53,8 @@ bot.command('start', async (ctx) => {
     if (!user) {
       user = await User.create({
         telegramId,
-        firstName: ctx.from.first_name,
-        username: ctx.from.username
+        firstName: ctx.from.first_name || '',
+        username: ctx.from.username || ''
       });
     }
 
@@ -201,7 +186,7 @@ const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 }, storage });
 app.get('/api/users/:telegramId', async (req, res) => {
   try {
     const { telegramId } = req.params;
-    const user = await User.findOne({ telegramId });
+    const user = await User.findOne({ telegramId: String(telegramId) });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -224,6 +209,16 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
+app.get('/api/lotteries/featured', async (req, res) => {
+  try {
+    const lottery = await Lottery.findOne({ isFeatured: true, status: 'active' });
+    if (!lottery) return res.status(404).json({ message: 'No active lottery found' });
+    res.json(lottery);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/lotteries', async (req, res) => {
   try {
     const { title, color, imageUrl, ticketPrice, totalTickets, durationDays, isFeatured } = req.body;
@@ -237,11 +232,10 @@ app.post('/api/lotteries', async (req, res) => {
       imageUrl,
       ticketPrice: Number(ticketPrice),
       totalTickets: Number(totalTickets),
-      remainingTickets: Number(totalTickets),
       soldTickets: 0,
-      takenNumbers: [],
       endDate,
-      isFeatured: isFeatured ?? true
+      isFeatured: isFeatured ?? true,
+      status: 'active'
     });
 
     await newLottery.save();
@@ -256,7 +250,7 @@ app.post('/api/lotteries', async (req, res) => {
 
 app.get('/api/admin/tickets', async (req, res) => {
   try {
-    const tickets = await Ticket.find().sort({ createdAt: -1 });
+    const tickets = await Ticket.find().populate('lotteryId').sort({ createdAt: -1 });
     res.json({ success: true, tickets });
   } catch (error) {
     console.error('Error fetching admin tickets:', error);
@@ -340,8 +334,8 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
 
     const newTicket = new Ticket({
       orderId,
-      lotteryId: lotteryId && mongoose.Types.ObjectId.isValid(lotteryId) ? lotteryId : new mongoose.Types.ObjectId(),
-      telegramId,
+      lotteryId,
+      telegramId: String(telegramId),
       fullName,
       phoneNumber,
       selectedNumbers: parsedNumbers,
@@ -358,8 +352,7 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
 
     if (lotteryId && mongoose.Types.ObjectId.isValid(lotteryId)) {
       await Lottery.findByIdAndUpdate(lotteryId, { 
-        $inc: { soldTickets: Number(ticketCount), remainingTickets: -Number(ticketCount) },
-        $push: { takenNumbers: {$each: parsedNumbers } }
+        $inc: { soldTickets: Number(ticketCount) } 
       });
     }
 
@@ -387,9 +380,9 @@ app.get('/api/tickets/user-tickets', async (req, res) => {
     const { phoneNumber, telegramId } = req.query;
     const query = {};
     if (phoneNumber) query.phoneNumber = phoneNumber;
-    if (telegramId) query.telegramId = telegramId;
+    if (telegramId) query.telegramId = String(telegramId);
 
-    const tickets = await Ticket.find(query).sort({ createdAt: -1 });
+    const tickets = await Ticket.find(query).populate('lotteryId').sort({ createdAt: -1 });
     res.json({ success: true, tickets });
   } catch (error) {
     console.error('Error fetching tickets:', error);
