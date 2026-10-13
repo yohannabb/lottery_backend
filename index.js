@@ -261,6 +261,40 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
   }
 });
 
+// 📢 NEW ADMIN BROADCAST ANNOUNCEMENT ROUTE
+app.post('/api/admin/broadcast', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'Message content is required' });
+    }
+
+    // Fetch all registered users who have a saved Telegram ID in MongoDB
+    const users = await User.find({ telegramId: { $exists: true,$ne: null } });
+    
+    let successCount = 0;
+    let failCount = 0;
+
+    // Loop through every user and send them the announcement message via the bot API
+    for (const user of users) {
+      try {
+        await bot.api.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' });
+        successCount++;
+      } catch (err) {
+        // If a user blocked the bot or closed their account, it counts as failed
+        failCount++;
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Broadcast complete! Successfully sent: ${successCount}, Failed: ${failCount}` 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
   try {
     const { lotteryId, telegramId, fullName, phoneNumber, selectedNumbers, isQuickPick, ticketCount, totalPrice, senderAccount } = req.body;
