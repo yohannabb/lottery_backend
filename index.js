@@ -312,7 +312,7 @@ app.get('/api/admin/tickets', async (req, res) => {
   }
 });
 
-// 🔒 CRITICAL UPDATE: LOCK TAKEN NUMBERS PERMANENTLY UPON ADMIN APPROVAL
+// 🔒 LOCK TAKEN NUMBERS PERMANENTLY UPON ADMIN APPROVAL
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
   try {
     const ticket = await Ticket.findOneAndUpdate(
@@ -327,7 +327,7 @@ app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
 
     if (ticket.lotteryId && ticket.selectedNumbers && ticket.selectedNumbers.length > 0) {
       await Lottery.findByIdAndUpdate(ticket.lotteryId, {
-        $addToSet: { takenNumbers: { $each: ticket.selectedNumbers } }
+        $addToSet: { takenNumbers: {$each: ticket.selectedNumbers } }
       });
     }
 
@@ -451,7 +451,7 @@ app.get('/api/tickets/user-tickets', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.isMainThread || process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
