@@ -27,6 +27,9 @@ if (!BOT_TOKEN || BOT_TOKEN === 'your_telegram_bot_token_here') {
   process.exit(1);
 }
 
+// Set your Admin Telegram ID for the /post command security check
+const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '123456789';
+
 const bot = new Bot(BOT_TOKEN);
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://gechocarekub.netlify.app';
 
@@ -69,6 +72,59 @@ bot.command('start', async (ctx) => {
     });
   } catch (error) {
     console.error('Error in /start command:', error);
+  }
+});
+
+// 📢 TELEGRAM /post COMMAND FOR BROADCASTING TO ALL SUBSCRIBERS
+bot.command('post', async (ctx) => {
+  try {
+    const senderId = String(ctx.from.id);
+
+    // 🔒 Security Check: Ensure only you (the admin) can run this command
+    if (senderId !== String(ADMIN_TELEGRAM_ID)) {
+      await ctx.reply('❌ Unauthorized: Only the administrator can broadcast messages.');
+      return;
+    }
+
+    // Extract the text after the "/post " command
+    const broadcastText = ctx.match ? ctx.match.trim() : '';
+
+    if (!broadcastText) {
+      await ctx.reply(
+        '⚠️ *Usage:* Please include the text to broadcast.\n\n' +
+        'Example:\n`/post 🚨 New car added! Open the app to select your numbers.`',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    await ctx.reply('⏳ Broadcasting message to all subscribers...');
+
+    // Fetch all users who have interacted with the bot from MongoDB
+    const users = await User.find({ telegramId: { $exists: true,$ne: null } });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    // Send the message to every subscriber
+    for (const user of users) {
+      try {
+        await bot.api.sendMessage(user.telegramId, broadcastText, { parse_mode: 'Markdown' });
+        successCount++;
+      } catch (err) {
+        failCount++;
+      }
+    }
+
+    await ctx.reply(
+      `✅ *Broadcast Completed!*\n\n` +
+      `📥 *Delivered:* ${successCount}\n` +
+      `❌ *Failed:* ${failCount}`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Error handling /post command:', error);
+    await ctx.reply('❌ An error occurred while sending the broadcast.');
   }
 });
 
@@ -261,7 +317,7 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
   }
 });
 
-// 📢 NEW ADMIN BROADCAST ANNOUNCEMENT ROUTE
+// ADMIN BROADCAST ROUTE (supporting API/Dashboard calls too)
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
     const { message } = req.body;
@@ -269,19 +325,15 @@ app.post('/api/admin/broadcast', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Message content is required' });
     }
 
-    // Fetch all registered users who have a saved Telegram ID in MongoDB
     const users = await User.find({ telegramId: { $exists: true,$ne: null } });
-    
     let successCount = 0;
     let failCount = 0;
 
-    // Loop through every user and send them the announcement message via the bot API
     for (const user of users) {
       try {
         await bot.api.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' });
         successCount++;
       } catch (err) {
-        // If a user blocked the bot or closed their account, it counts as failed
         failCount++;
       }
     }
