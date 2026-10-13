@@ -72,7 +72,7 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// 🔄 INTELLIGENT CALLBACK: Checks if phone number exists in DB to prevent asking twice!
+// INTELLIGENT CALLBACK: Checks if phone number exists in DB to prevent asking twice!
 bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
   try {
     const selectedLang = ctx.match[1];
@@ -107,7 +107,6 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
       return;
     }
 
-    // Otherwise, ask for phone number only if not saved yet
     const prompts = {
       or: 'Maaloo lakkoofsa bilbilaa keessan ergaa.',
       am: 'እባክዎ ስልክ ቁጥርዎን ያካፍሉ።',
@@ -185,7 +184,10 @@ app.patch('/api/users/:telegramId', async (req, res) => {
     const { phoneNumber, fullName } = req.body;
     const updateData = { isRegistered: true };
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
-    if (fullName) updateData.firstName = fullName;
+    if (fullName) {
+      updateData.fullName = fullName;
+      updateData.firstName = fullName;
+    }
 
     const user = await User.findOneAndUpdate(
       { telegramId: String(telegramId) },
@@ -199,54 +201,88 @@ app.patch('/api/users/:telegramId', async (req, res) => {
 });
 
 app.get('/api/lotteries', async (req, res) => {
-  const lotteries = await Lottery.find().sort({ createdAt: -1 });
-  res.json({ success: true, lotteries });
+  try {
+    const lotteries = await Lottery.find().sort({ createdAt: -1 });
+    res.json({ success: true, lotteries });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/lotteries', async (req, res) => {
+  try {
+    const newLottery = new Lottery(req.body);
+    await newLottery.save();
+    res.status(201).json({ success: true, lottery: newLottery });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 app.get('/api/admin/tickets', async (req, res) => {
-  const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
-  res.json({ success: true, tickets });
+  try {
+    const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
+    res.json({ success: true, tickets });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
-  const ticket = await Ticket.findOneAndUpdate({ orderId: req.params.orderId }, { status: 'APPROVED' }, { returnDocument: 'after' });
-  res.json({ success: true, ticket });
+  try {
+    const ticket = await Ticket.findOneAndUpdate({ orderId: req.params.orderId }, { status: 'APPROVED' }, { returnDocument: 'after' });
+    res.json({ success: true, ticket });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
-  const ticket = await Ticket.findOneAndUpdate({ orderId: req.params.orderId }, { status: 'REJECTED' }, { returnDocument: 'after' });
-  res.json({ success: true, ticket });
+  try {
+    const ticket = await Ticket.findOneAndUpdate({ orderId: req.params.orderId }, { status: 'REJECTED' }, { returnDocument: 'after' });
+    res.json({ success: true, ticket });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
-  const { lotteryId, telegramId, fullName, phoneNumber, selectedNumbers, isQuickPick, ticketCount, totalPrice, senderAccount } = req.body;
-  const parsedNumbers = selectedNumbers ? JSON.parse(selectedNumbers) : [];
-  const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
-  const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
+  try {
+    const { lotteryId, telegramId, fullName, phoneNumber, selectedNumbers, isQuickPick, ticketCount, totalPrice, senderAccount } = req.body;
+    const parsedNumbers = selectedNumbers ? JSON.parse(selectedNumbers) : [];
+    const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
+    const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
 
-  const newTicket = new Ticket({
-    orderId, lotteryId, telegramId: String(telegramId), fullName,
-    phoneNumber: phoneNumber || '+251900000000',
-    selectedNumbers: parsedNumbers, isQuickPick: isQuickPick === 'true',
-    ticketCount: Number(ticketCount), totalPrice: Number(totalPrice),
-    senderAccount, receiptUrl, status: 'PENDING REVIEW'
-  });
+    const newTicket = new Ticket({
+      orderId, lotteryId, telegramId: String(telegramId), fullName,
+      phoneNumber: phoneNumber || '+251900000000',
+      selectedNumbers: parsedNumbers, isQuickPick: isQuickPick === 'true',
+      ticketCount: Number(ticketCount), totalPrice: Number(totalPrice),
+      senderAccount, receiptUrl, status: 'PENDING REVIEW'
+    });
 
-  await newTicket.save();
-  res.status(201).json({ success: true, orderId, ticket: newTicket });
+    await newTicket.save();
+    res.status(201).json({ success: true, orderId, ticket: newTicket });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 app.get('/api/tickets/user-tickets', async (req, res) => {
-  const { phoneNumber, telegramId } = req.query;
-  const query = {};
-  if (phoneNumber) query.phoneNumber = phoneNumber;
-  if (telegramId) query.telegramId = String(telegramId);
-  const tickets = await Ticket.find(query).populate('lotteryId').sort({ createdAt: -1 });
-  res.json({ success: true, tickets });
+  try {
+    const { phoneNumber, telegramId } = req.query;
+    const query = {};
+    if (phoneNumber) query.phoneNumber = phoneNumber;
+    if (telegramId) query.telegramId = String(telegramId);
+    const tickets = await Ticket.find(query).populate('lotteryId').sort({ createdAt: -1 });
+    res.json({ success: true, tickets });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
 mongoose.connect(process.env.MONGO_URI).then(() => {
-  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 API on port ${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 API running on port ${PORT}`));
   bot.start().catch((err) => console.warn('Telegram warning:', err.message));
 });
