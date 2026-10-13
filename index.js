@@ -7,26 +7,20 @@ const path = require('path');
 const fs = require('fs');
 const { Bot, InlineKeyboard, Keyboard } = require('grammy');
 
-// Mongoose Models
 const User = require('./models/User');
 const Ticket = require('./models/Ticket');
 const Lottery = require('./models/Lottery');
 
-// Initialize Express App
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Create Uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, 'uploads/receipts');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ------------------------------------------------------------------
-// Telegram Bot Token Validation & Initialization
-// ------------------------------------------------------------------
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
 
 if (!BOT_TOKEN || BOT_TOKEN === 'your_telegram_bot_token_here') {
@@ -40,10 +34,6 @@ const MINI_APP_URL = process.env.MINI_APP_URL || 'https://gechocarekub.netlify.a
 bot.catch((err) => {
   console.error(`❌ Bot Error (${err.ctx?.update?.update_id || 'unknown'}):`, err.error);
 });
-
-// ------------------------------------------------------------------
-// 1. Telegram Bot Handlers
-// ------------------------------------------------------------------
 
 bot.command('start', async (ctx) => {
   try {
@@ -88,7 +78,7 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
     const selectedLang = ctx.match[1];
     const telegramId = String(ctx.from.id);
 
-    const user = await User.findOneAndUpdate(
+    await User.findOneAndUpdate(
       { telegramId }, 
       { language: selectedLang },
       { returnDocument: 'after' }
@@ -110,107 +100,23 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
       en: '✉️ Invite friends'
     };
 
-    if (user && user.phoneNumber && user.isRegistered) {
-      const welcomeBackMsgs = {
-        or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
-        am: '👋 እንኳን ደስ ብሎዎት! መተግበሪያውን ከታች ይክፈቱ።',
-        en: '👋 Welcome back! Open the app below.'
-      };
-
-      const inlineKeyboard = new InlineKeyboard()
-        .webApp(appBtnTexts[selectedLang], MINI_APP_URL).row()
-        .url(inviteBtnTexts[selectedLang], inviteLink);
-
-      await ctx.reply(welcomeBackMsgs[selectedLang], {
-        reply_markup: inlineKeyboard
-      });
-      return;
-    }
-
-    const prompts = {
-      or: 'Maaloo lakkoofsa bilbilaa keessan ergaa.',
-      am: 'እባክዎ ስልክ ቁጥርዎን ያካፍሉ።',
-      en: 'Please share your phone number.'
+    const welcomeBackMsgs = {
+      or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
+      am: '👋 እንኳን ደስ ብሎዎት! መተግበሪያውን ከታች ይክፈቱ።',
+      en: '👋 Welcome back! Open the app below.'
     };
 
-    const buttonTexts = {
-      or: '📱 Lakkoofsa bilbilaa ergi',
-      am: '📱 ስልክ ቁጥር ያካፍሉ',
-      en: '📱 Share my phone'
-    };
+    const inlineKeyboard = new InlineKeyboard()
+      .webApp(appBtnTexts[selectedLang], MINI_APP_URL).row()
+      .url(inviteBtnTexts[selectedLang], inviteLink);
 
-    const contactKeyboard = new Keyboard()
-      .requestContact(buttonTexts[selectedLang])
-      .resized()
-      .oneTime();
-
-    await ctx.reply(prompts[selectedLang], {
-      reply_markup: contactKeyboard
+    await ctx.reply(welcomeBackMsgs[selectedLang], {
+      reply_markup: inlineKeyboard
     });
   } catch (error) {
     console.error('Error in language callback:', error);
   }
 });
-
-bot.on('message:contact', async (ctx) => {
-  try {
-    const telegramId = String(ctx.from.id);
-    const phoneNumber = ctx.message.contact.phone_number;
-
-    const user = await User.findOneAndUpdate(
-      { telegramId },
-      { phoneNumber, isRegistered: true },
-      { upsert: true, returnDocument: 'after' }
-    );
-
-    const lang = user ? user.language : 'en';
-
-    const confirmMsgs = {
-      or: '✅ Lakkoofsi bilbilaa mirkanaa\'eera.',
-      am: '✅ ስልክ ቁጥር ተረጋገጠ።',
-      en: '✅ Phone number confirmed.'
-    };
-
-    const appMsgs = {
-      or: '👇 Appichaa banachuuf gadi bu\'aa.',
-      am: '👇 መተግበሪያውን ለመክፈት ከታች ይጫኑ።',
-      en: '👇 Tap below to open the app.'
-    };
-
-    const appBtnTexts = {
-      or: '🚗 App Banadhu',
-      am: '🚗 መተግበሪያውን ክፈት',
-      en: '🚗 Getachew Fikadu app'
-    };
-
-    const inviteBtnTexts = {
-      or: '✉️ Hiriyoota affeeri',
-      am: '✉️ ጓደኞችን ይጋብዙ',
-      en: '✉️ Invite friends'
-    };
-
-    await ctx.reply(confirmMsgs[lang], {
-      reply_markup: { remove_keyboard: true }
-    });
-
-    const botUsername = ctx.me.username;
-    const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%20our%20Car%20Lottery!`;
-
-    const inlineKeyboard = new InlineKeyboard()
-      .webApp(appBtnTexts[lang], MINI_APP_URL).row()
-      .url(inviteBtnTexts[lang], inviteLink);
-
-    await ctx.reply(appMsgs[lang], {
-      reply_markup: inlineKeyboard
-    });
-  } catch (error) {
-    console.error('Error in contact handler:', error);
-  }
-});
-
-// ------------------------------------------------------------------
-// 2. Express API Routes
-// ------------------------------------------------------------------
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -236,18 +142,21 @@ app.get('/api/users/:telegramId', async (req, res) => {
   }
 });
 
+// Robust Profile Upsert Route (Saves Name & Phone permanently)
 app.patch('/api/users/:telegramId', async (req, res) => {
   try {
     const { telegramId } = req.params;
-    const { phoneNumber } = req.body;
+    const { phoneNumber, fullName } = req.body;
+    
+    const updateData = { isRegistered: true };
+    if (phoneNumber) updateData.phoneNumber = phoneNumber;
+    if (fullName) updateData.firstName = fullName;
+
     const user = await User.findOneAndUpdate(
       { telegramId: String(telegramId) },
-      { phoneNumber, isRegistered: true },
-      { returnDocument: 'after' }
+      updateData,
+      { upsert: true, new: true, returnDocument: 'after' }
     );
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
     res.json({ success: true, user });
   } catch (error) {
     console.error('Error updating user profile:', error);
@@ -265,27 +174,14 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
-app.get('/api/lotteries/featured', async (req, res) => {
-  try {
-    const lottery = await Lottery.findOne({ isFeatured: true, status: 'active' });
-    if (!lottery) return res.status(404).json({ message: 'No active lottery found' });
-    res.json(lottery);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.post('/api/lotteries', async (req, res) => {
   try {
     const { title, color, imageUrl, ticketPrice, totalTickets, durationDays, isFeatured } = req.body;
-    
     const days = Number(durationDays) || 30;
     const endDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     const newLottery = new Lottery({
-      title,
-      color,
-      imageUrl,
+      title, color, imageUrl,
       ticketPrice: Number(ticketPrice),
       totalTickets: Number(totalTickets),
       soldTickets: 0,
@@ -312,7 +208,6 @@ app.get('/api/admin/tickets', async (req, res) => {
   }
 });
 
-// 🔒 TYPE-SAFE APPROVAL ROUTE: LOCK ALL SELECTED NUMBERS PERMANENTLY
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
   try {
     const ticket = await Ticket.findOneAndUpdate(
@@ -418,18 +313,6 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
       });
     }
 
-    if (process.env.ADMIN_CHAT_ID && process.env.ADMIN_CHAT_ID !== 'your_admin_chat_id_here') {
-      const adminMsg = 
-        `🚨 *New Ticket Order Submitted*\n\n` +
-        `👤 *Name:* ${fullName}\n` +
-        `📞 *Phone:* ${validPhoneNumber}\n` +
-        `🎫 *Ticket Numbers:* ${parsedNumbers.join(', ') || 'Random'}\n` +
-        `💰 *Total:* ${totalPrice} Birr\n` +
-        `🆔 *Order ID:* #${orderId}`;
-
-      await bot.api.sendMessage(process.env.ADMIN_CHAT_ID, adminMsg, { parse_mode: 'Markdown' });
-    }
-
     res.status(201).json({ success: true, orderId, ticket: newTicket });
   } catch (error) {
     console.error('Error saving order:', error);
@@ -463,18 +346,8 @@ if (!MONGO_URI) {
 mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log('✅ MongoDB connected successfully');
-    
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 API running and listening on port ${PORT}`);
-    });
-
-    console.log('🤖 Starting Telegram Bot polling...');
-    bot.start({
-      onStart: (botInfo) => {
-        console.log(`✨ Bot connected successfully as @${botInfo.username}`);
-      }
-    }).catch((err) => {
-      console.warn('⚠️ Telegram background polling conflict/warning (App stays online):', err.message);
     });
   })
   .catch(err => {
