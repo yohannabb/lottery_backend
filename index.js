@@ -15,11 +15,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const uploadDir = path.join(__dirname, 'uploads/receipts');
+const uploadDir = path.join(process.cwd(), 'uploads/receipts');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
 if (!BOT_TOKEN || BOT_TOKEN === 'your_telegram_bot_token_here') {
@@ -131,7 +131,7 @@ bot.on('message:text', async (ctx, next) => {
         `❌ *Failed:* ${failCount}`,
         { parse_mode: 'Markdown' }
       );
-      return; // Stop processing other handlers
+      return;
     } catch (error) {
       console.error('Error handling broadcast text:', error);
       await ctx.reply('❌ An error occurred while sending the broadcast.');
@@ -139,7 +139,6 @@ bot.on('message:text', async (ctx, next) => {
     }
   }
 
-  // If not a post command, pass to next handlers/middleware
   return next();
 });
 
@@ -162,7 +161,6 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
     const appBtnTexts = { or: '🚗 App Banadhu', am: '🚗 መተግበሪያውን ክፈት', en: '🚗 Getachew Fikadu app' };
     const inviteBtnTexts = { or: '✉️ Hiriyoota affeeri', am: '✉️ ጓደኞችን ይጋብዙ', en: '✉️ Invite friends' };
 
-    // If user already has a phone number saved, skip asking for phone number completely!
     if (user && user.phoneNumber && user.phoneNumber.trim() !== '') {
       const welcomeBackMsgs = {
         or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
@@ -290,6 +288,23 @@ app.post('/api/lotteries', async (req, res) => {
   }
 });
 
+// UPDATE / EDIT LOTTERY ROUTE
+app.patch('/api/lotteries/:id', async (req, res) => {
+  try {
+    const updatedLottery = await Lottery.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedLottery) {
+      return res.status(404).json({ success: false, message: 'Lottery not found' });
+    }
+    res.json({ success: true, lottery: updatedLottery });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.get('/api/admin/tickets', async (req, res) => {
   try {
     const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
@@ -311,7 +326,6 @@ app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
       ticket.status = 'APPROVED';
       await ticket.save();
 
-      // Push approved numbers into the Lottery's takenNumbers array and increment soldTickets
       await Lottery.findByIdAndUpdate(ticket.lotteryId, {
         $push: { takenNumbers: { $each: ticket.selectedNumbers } },$inc: { soldTickets: ticket.selectedNumbers.length }
       });
