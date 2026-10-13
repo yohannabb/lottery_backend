@@ -228,9 +228,24 @@ app.get('/api/admin/tickets', async (req, res) => {
   }
 });
 
+// FIXED ADMIN APPROVAL ROUTE: Locks out approved numbers into takenNumbers array
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
   try {
-    const ticket = await Ticket.findOneAndUpdate({ orderId: req.params.orderId }, { status: 'APPROVED' }, { returnDocument: 'after' });
+    const ticket = await Ticket.findOne({ orderId: req.params.orderId });
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+
+    if (ticket.status !== 'APPROVED') {
+      ticket.status = 'APPROVED';
+      await ticket.save();
+
+      // Push approved numbers into the Lottery's takenNumbers array and increment soldTickets
+      await Lottery.findByIdAndUpdate(ticket.lotteryId, {
+        $push: { takenNumbers: { $each: ticket.selectedNumbers } },$inc: { soldTickets: ticket.selectedNumbers.length }
+      });
+    }
+
     res.json({ success: true, ticket });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
