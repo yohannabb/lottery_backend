@@ -75,21 +75,23 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// 📢 ROBUST TELEGRAM /post COMMAND FOR BROADCASTING
+// 📢 BULLETPROOF TELEGRAM /post COMMAND FOR BROADCASTING WITH DEBUGGING LOGS
 bot.command('post', async (ctx) => {
   try {
-    const senderId = String(ctx.from.id);
-    console.log(`[POST COMMAND] Received from Telegram ID: ${senderId}`);
-    console.log(`[POST COMMAND] Configured Admin ID: ${ADMIN_TELEGRAM_ID}`);
+    const senderId = String(ctx.from.id).trim();
+    const adminId = String(process.env.ADMIN_TELEGRAM_ID || '').trim();
+
+    console.log(`----------------------------------------`);
+    console.log(`[POST CHECK] Sender Telegram ID: "${senderId}"`);
+    console.log(`[POST CHECK] Configured Admin ID: "${adminId}"`);
+    console.log(`----------------------------------------`);
 
     // 🔒 Security Check
-    if (senderId !== String(ADMIN_TELEGRAM_ID)) {
-      console.log(`[POST COMMAND] Unauthorized access attempt by ${senderId}`);
-      await ctx.reply('❌ Unauthorized: Only the administrator can broadcast messages.');
+    if (!adminId || senderId !== adminId) {
+      await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID.`);
       return;
     }
 
-    // Safely extract the message text from ctx.message.text
     const fullText = ctx.message.text || '';
     const broadcastText = fullText.replace(/^\/post\s*/i, '').trim();
 
@@ -104,7 +106,6 @@ bot.command('post', async (ctx) => {
 
     await ctx.reply('⏳ Broadcasting message to all subscribers...');
 
-    // Fetch all users from MongoDB
     const users = await User.find({ telegramId: { $exists: true,$ne: null } });
     console.log(`[POST COMMAND] Found ${users.length} subscribers to broadcast to.`);
 
