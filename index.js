@@ -75,62 +75,72 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// 📢 BULLETPROOF TELEGRAM /post COMMAND FOR BROADCASTING
-bot.command('post', async (ctx) => {
-  try {
-    const senderId = String(ctx.from.id).trim();
-    const adminId = String(ADMIN_TELEGRAM_ID).trim();
+// 📢 FOOLPROOF TEXT LISTENER FOR /post BROADCASTING
+bot.on('message:text', async (ctx, next) => {
+  const text = ctx.message.text || '';
+  
+  // Check if message starts with /post (case-insensitive)
+  if (text.toLowerCase().startsWith('/post')) {
+    try {
+      const senderId = String(ctx.from.id).trim();
+      const adminId = String(ADMIN_TELEGRAM_ID).trim();
 
-    console.log(`----------------------------------------`);
-    console.log(`[POST CHECK] Sender Telegram ID: "${senderId}"`);
-    console.log(`[POST CHECK] Configured Admin ID: "${adminId}"`);
-    console.log(`----------------------------------------`);
+      console.log(`----------------------------------------`);
+      console.log(`[POST CHECK] Sender Telegram ID: "${senderId}"`);
+      console.log(`[POST CHECK] Configured Admin ID: "${adminId}"`);
+      console.log(`----------------------------------------`);
 
-    // 🔒 Security Check
-    if (senderId !== adminId) {
-      await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID (${adminId}).`);
-      return;
-    }
+      // 🔒 Security Check
+      if (senderId !== adminId) {
+        await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID.`);
+        return;
+      }
 
-    const fullText = ctx.message.text || '';
-    const broadcastText = fullText.replace(/^\/post\s*/i, '').trim();
+      // Extract the text after "/post"
+      const broadcastText = text.replace(/^\/post\s*/i, '').trim();
 
-    if (!broadcastText) {
+      if (!broadcastText) {
+        await ctx.reply(
+          '⚠️ *Usage:* Please include the text to broadcast.\n\n' +
+          'Example:\n`/post 🚨 New car added! Open the app to select your numbers.`',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      await ctx.reply('⏳ Broadcasting message to all subscribers...');
+
+      const users = await User.find({ telegramId: { $exists: true,$ne: null } });
+      console.log(`[POST COMMAND] Found ${users.length} subscribers to broadcast to.`);
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const user of users) {
+        try {
+          await bot.api.sendMessage(user.telegramId, broadcastText, { parse_mode: 'Markdown' });
+          successCount++;
+        } catch (err) {
+          failCount++;
+        }
+      }
+
       await ctx.reply(
-        '⚠️ *Usage:* Please include the text to broadcast.\n\n' +
-        'Example:\n`/post 🚨 New car added! Open the app to select your numbers.`',
+        `✅ *Broadcast Completed!*\n\n` +
+        `📥 *Delivered:* ${successCount}\n` +
+        `❌ *Failed:* ${failCount}`,
         { parse_mode: 'Markdown' }
       );
+      return; // Stop processing other handlers
+    } catch (error) {
+      console.error('Error handling broadcast text:', error);
+      await ctx.reply('❌ An error occurred while sending the broadcast.');
       return;
     }
-
-    await ctx.reply('⏳ Broadcasting message to all subscribers...');
-
-    const users = await User.find({ telegramId: { $exists: true,$ne: null } });
-    console.log(`[POST COMMAND] Found ${users.length} subscribers to broadcast to.`);
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const user of users) {
-      try {
-        await bot.api.sendMessage(user.telegramId, broadcastText, { parse_mode: 'Markdown' });
-        successCount++;
-      } catch (err) {
-        failCount++;
-      }
-    }
-
-    await ctx.reply(
-      `✅ *Broadcast Completed!*\n\n` +
-      `📥 *Delivered:* ${successCount}\n` +
-      `❌ *Failed:* ${failCount}`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error) {
-    console.error('Error handling /post command:', error);
-    await ctx.reply('❌ An error occurred while sending the broadcast.');
   }
+
+  // If not a post command, pass to next handlers/middleware
+  return next();
 });
 
 // INTELLIGENT CALLBACK: Checks if phone number exists in DB to prevent asking twice!
