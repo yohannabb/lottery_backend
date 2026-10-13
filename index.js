@@ -27,8 +27,8 @@ if (!BOT_TOKEN || BOT_TOKEN === 'your_telegram_bot_token_here') {
   process.exit(1);
 }
 
-// Set your Admin Telegram ID for the /post command security check
-const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '123456789';
+// Hardcoded fallback to your exact Telegram ID so it works immediately
+const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '8252809538';
 
 const bot = new Bot(BOT_TOKEN);
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://gechocarekub.netlify.app';
@@ -75,11 +75,11 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// 📢 BULLETPROOF TELEGRAM /post COMMAND FOR BROADCASTING WITH DEBUGGING LOGS
+// 📢 BULLETPROOF TELEGRAM /post COMMAND FOR BROADCASTING
 bot.command('post', async (ctx) => {
   try {
     const senderId = String(ctx.from.id).trim();
-    const adminId = String(process.env.ADMIN_TELEGRAM_ID || '').trim();
+    const adminId = String(ADMIN_TELEGRAM_ID).trim();
 
     console.log(`----------------------------------------`);
     console.log(`[POST CHECK] Sender Telegram ID: "${senderId}"`);
@@ -87,8 +87,8 @@ bot.command('post', async (ctx) => {
     console.log(`----------------------------------------`);
 
     // 🔒 Security Check
-    if (!adminId || senderId !== adminId) {
-      await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID.`);
+    if (senderId !== adminId) {
+      await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID (${adminId}).`);
       return;
     }
 
