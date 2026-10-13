@@ -22,9 +22,8 @@ if (!fs.existsSync(uploadDir)) {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
-
 if (!BOT_TOKEN || BOT_TOKEN === 'your_telegram_bot_token_here') {
-  console.error('\n❌ ERROR: Please configure your real Telegram Bot Token in Railway Variables!');
+  console.error('\n❌ ERROR: Please configure your real Telegram Bot Token!');
   process.exit(1);
 }
 
@@ -32,7 +31,7 @@ const bot = new Bot(BOT_TOKEN);
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://gechocarekub.netlify.app';
 
 bot.catch((err) => {
-  console.error(`❌ Bot Error (${err.ctx?.update?.update_id || 'unknown'}):`, err.error);
+  console.error(`❌ Bot Error:`, err.error);
 });
 
 bot.command('start', async (ctx) => {
@@ -73,12 +72,13 @@ bot.command('start', async (ctx) => {
   }
 });
 
+// 🔄 INTELLIGENT CALLBACK: Checks if phone number exists in DB to prevent asking twice!
 bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
   try {
     const selectedLang = ctx.match[1];
     const telegramId = String(ctx.from.id);
 
-    await User.findOneAndUpdate(
+    const user = await User.findOneAndUpdate(
       { telegramId }, 
       { language: selectedLang },
       { returnDocument: 'after' }
@@ -88,33 +88,76 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
     const botUsername = ctx.me.username;
     const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%20our%20Car%20Lottery!`;
 
-    const appBtnTexts = {
-      or: '🚗 App Banadhu',
-      am: '🚗 መተግበሪያውን ክፈት',
-      en: '🚗 Getachew Fikadu app'
+    const appBtnTexts = { or: '🚗 App Banadhu', am: '🚗 መተግበሪያውን ክፈት', en: '🚗 Getachew Fikadu app' };
+    const inviteBtnTexts = { or: '✉️ Hiriyoota affeeri', am: '✉️ ጓደኞችን ይጋብዙ', en: '✉️ Invite friends' };
+
+    // If user already has a phone number saved, skip asking for phone number completely!
+    if (user && user.phoneNumber && user.phoneNumber.trim() !== '') {
+      const welcomeBackMsgs = {
+        or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
+        am: '👋 እንኳን ደስ ብሎዎት! መተግበሪያውን ከታች ይክፈቱ።',
+        en: '👋 Welcome back! Open the app below.'
+      };
+
+      const inlineKeyboard = new InlineKeyboard()
+        .webApp(appBtnTexts[selectedLang], MINI_APP_URL).row()
+        .url(inviteBtnTexts[selectedLang], inviteLink);
+
+      await ctx.reply(welcomeBackMsgs[selectedLang], { reply_markup: inlineKeyboard });
+      return;
+    }
+
+    // Otherwise, ask for phone number only if not saved yet
+    const prompts = {
+      or: 'Maaloo lakkoofsa bilbilaa keessan ergaa.',
+      am: 'እባክዎ ስልክ ቁጥርዎን ያካፍሉ።',
+      en: 'Please share your phone number.'
     };
 
-    const inviteBtnTexts = {
-      or: '✉️ Hiriyoota affeeri',
-      am: '✉️ ጓደኞችን ይጋብዙ',
-      en: '✉️ Invite friends'
+    const buttonTexts = {
+      or: '📱 Lakkoofsa bilbilaa ergi',
+      am: '📱 ስልክ ቁጥር ያካፍሉ',
+      en: '📱 Share my phone'
     };
 
-    const welcomeBackMsgs = {
-      or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
-      am: '👋 እንኳን ደስ ብሎዎት! መተግበሪያውን ከታች ይክፈቱ።',
-      en: '👋 Welcome back! Open the app below.'
-    };
+    const contactKeyboard = new Keyboard()
+      .requestContact(buttonTexts[selectedLang])
+      .resized()
+      .oneTime();
 
-    const inlineKeyboard = new InlineKeyboard()
-      .webApp(appBtnTexts[selectedLang], MINI_APP_URL).row()
-      .url(inviteBtnTexts[selectedLang], inviteLink);
-
-    await ctx.reply(welcomeBackMsgs[selectedLang], {
-      reply_markup: inlineKeyboard
-    });
+    await ctx.reply(prompts[selectedLang], { reply_markup: contactKeyboard });
   } catch (error) {
     console.error('Error in language callback:', error);
+  }
+});
+
+bot.on('message:contact', async (ctx) => {
+  try {
+    const telegramId = String(ctx.from.id);
+    const phoneNumber = ctx.message.contact.phone_number;
+
+    const user = await User.findOneAndUpdate(
+      { telegramId },
+      { phoneNumber, isRegistered: true },
+      { upsert: true, returnDocument: 'after' }
+    );
+
+    const lang = user ? user.language : 'en';
+    const appBtnTexts = { or: '🚗 App Banadhu', am: '🚗 መተግበሪያውን ክፈት', en: '🚗 Getachew Fikadu app' };
+    const inviteBtnTexts = { or: '✉️ Hiriyoota affeeri', am: '✉️ ጓደኞችን ይጋብዙ', en: '✉️ Invite friends' };
+
+    await ctx.reply('✅ Phone number confirmed.', { reply_markup: { remove_keyboard: true } });
+
+    const botUsername = ctx.me.username;
+    const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%20our%20Car%20Lottery!`;
+
+    const inlineKeyboard = new InlineKeyboard()
+      .webApp(appBtnTexts[lang], MINI_APP_URL).row()
+      .url(inviteBtnTexts[lang], inviteLink);
+
+    await ctx.reply('👇 Tap below to open the app.', { reply_markup: inlineKeyboard });
+  } catch (error) {
+    console.error('Error in contact handler:', error);
   }
 });
 
@@ -124,30 +167,22 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 }, storage });
 
-app.get('/', (req, res) => {
-  res.json({ success: true, message: 'Car Lottery Backend is live!' });
-});
+app.get('/', (req, res) => res.json({ success: true, message: 'Backend live' }));
 
 app.get('/api/users/:telegramId', async (req, res) => {
   try {
-    const { telegramId } = req.params;
-    const user = await User.findOne({ telegramId: String(telegramId) });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    const user = await User.findOne({ telegramId: String(req.params.telegramId) });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, user });
   } catch (error) {
-    console.error('Error fetching user profile:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Robust profile update / upsert route for phone & name persistence
 app.patch('/api/users/:telegramId', async (req, res) => {
   try {
     const { telegramId } = req.params;
     const { phoneNumber, fullName } = req.body;
-    
     const updateData = { isRegistered: true };
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
     if (fullName) updateData.firstName = fullName;
@@ -159,159 +194,59 @@ app.patch('/api/users/:telegramId', async (req, res) => {
     );
     res.json({ success: true, user });
   } catch (error) {
-    console.error('Error updating user profile:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
 app.get('/api/lotteries', async (req, res) => {
-  try {
-    const lotteries = await Lottery.find().sort({ createdAt: -1 });
-    res.json({ success: true, lotteries });
-  } catch (error) {
-    console.error('Error fetching lotteries:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+  const lotteries = await Lottery.find().sort({ createdAt: -1 });
+  res.json({ success: true, lotteries });
 });
 
 app.get('/api/admin/tickets', async (req, res) => {
-  try {
-    const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
-    res.json({ success: true, tickets });
-  } catch (error) {
-    console.error('Error fetching admin tickets:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+  const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
+  res.json({ success: true, tickets });
 });
 
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
-  try {
-    const ticket = await Ticket.findOneAndUpdate(
-      { orderId: req.params.orderId },
-      { status: 'APPROVED' },
-      { returnDocument: 'after' }
-    );
-
-    if (!ticket) {
-      return res.status(404).json({ success: false, message: 'Ticket not found' });
-    }
-
-    if (ticket.lotteryId && ticket.selectedNumbers && ticket.selectedNumbers.length > 0) {
-      const numericNumbers = ticket.selectedNumbers.map(n => Number(n));
-      await Lottery.findByIdAndUpdate(ticket.lotteryId, {
-        $addToSet: { takenNumbers: { $each: numericNumbers } }
-      });
-    }
-
-    if (ticket.telegramId) {
-      try {
-        await bot.api.sendMessage(
-          ticket.telegramId,
-          `🎉 *Ticket Approved!*\n\nYour order *#${ticket.orderId}* has been confirmed by the admin. Good luck!`
-        );
-      } catch (e) {
-        console.error('Failed to notify customer on Telegram:', e.message);
-      }
-    }
-
-    res.json({ success: true, ticket });
-  } catch (error) {
-    console.error('Error approving ticket:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+  const ticket = await Ticket.findOneAndUpdate({ orderId: req.params.orderId }, { status: 'APPROVED' }, { returnDocument: 'after' });
+  res.json({ success: true, ticket });
 });
 
 app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
-  try {
-    const ticket = await Ticket.findOneAndUpdate(
-      { orderId: req.params.orderId },
-      { status: 'REJECTED' },
-      { returnDocument: 'after' }
-    );
-
-    if (!ticket) {
-      return res.status(404).json({ success: false, message: 'Ticket not found' });
-    }
-
-    res.json({ success: true, ticket });
-  } catch (error) {
-    console.error('Error rejecting ticket:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+  const ticket = await Ticket.findOneAndUpdate({ orderId: req.params.orderId }, { status: 'REJECTED' }, { returnDocument: 'after' });
+  res.json({ success: true, ticket });
 });
 
 app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
-  try {
-    const { 
-      lotteryId, telegramId, fullName, phoneNumber, 
-      selectedNumbers, isQuickPick, ticketCount, totalPrice, 
-      bankName, senderAccount 
-    } = req.body;
+  const { lotteryId, telegramId, fullName, phoneNumber, selectedNumbers, isQuickPick, ticketCount, totalPrice, senderAccount } = req.body;
+  const parsedNumbers = selectedNumbers ? JSON.parse(selectedNumbers) : [];
+  const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
+  const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
 
-    const parsedNumbers = selectedNumbers ? JSON.parse(selectedNumbers) : [];
-    const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
-    const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
+  const newTicket = new Ticket({
+    orderId, lotteryId, telegramId: String(telegramId), fullName,
+    phoneNumber: phoneNumber || '+251900000000',
+    selectedNumbers: parsedNumbers, isQuickPick: isQuickPick === 'true',
+    ticketCount: Number(ticketCount), totalPrice: Number(totalPrice),
+    senderAccount, receiptUrl, status: 'PENDING REVIEW'
+  });
 
-    const validPhoneNumber = (phoneNumber && phoneNumber.trim() !== '') ? phoneNumber : '+251900000000';
-
-    const newTicket = new Ticket({
-      orderId,
-      lotteryId,
-      telegramId: String(telegramId),
-      fullName,
-      phoneNumber: validPhoneNumber,
-      selectedNumbers: parsedNumbers,
-      isQuickPick: isQuickPick === 'true',
-      ticketCount: Number(ticketCount),
-      totalPrice: Number(totalPrice),
-      bankName,
-      senderAccount,
-      receiptUrl,
-      status: 'PENDING REVIEW'
-    });
-
-    await newTicket.save();
-
-    if (lotteryId && mongoose.Types.ObjectId.isValid(lotteryId)) {
-      await Lottery.findByIdAndUpdate(lotteryId, { 
-        $inc: { soldTickets: Number(ticketCount) } 
-      });
-    }
-
-    res.status(201).json({ success: true, orderId, ticket: newTicket });
-  } catch (error) {
-    console.error('Error saving order:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+  await newTicket.save();
+  res.status(201).json({ success: true, orderId, ticket: newTicket });
 });
 
 app.get('/api/tickets/user-tickets', async (req, res) => {
-  try {
-    const { phoneNumber, telegramId } = req.query;
-    const query = {};
-    if (phoneNumber) query.phoneNumber = phoneNumber;
-    if (telegramId) query.telegramId = String(telegramId);
-
-    const tickets = await Ticket.find(query).populate('lotteryId').sort({ createdAt: -1 });
-    res.json({ success: true, tickets });
-  } catch (error) {
-    console.error('Error fetching tickets:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+  const { phoneNumber, telegramId } = req.query;
+  const query = {};
+  if (phoneNumber) query.phoneNumber = phoneNumber;
+  if (telegramId) query.telegramId = String(telegramId);
+  const tickets = await Ticket.find(query).populate('lotteryId').sort({ createdAt: -1 });
+  res.json({ success: true, tickets });
 });
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI;
-
-mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB connected successfully');
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 API running and listening on port ${PORT}`);
-    });
-    bot.start().catch((err) => console.warn('⚠️ Telegram polling warning:', err.message));
-  })
-  .catch(err => {
-    console.error('❌ DB Connection Error:', err);
-    process.exit(1);
-  });
+mongoose.connect(process.env.MONGO_URI).then(() => {
+  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 API on port ${PORT}`));
+  bot.start().catch((err) => console.warn('Telegram warning:', err.message));
+});
