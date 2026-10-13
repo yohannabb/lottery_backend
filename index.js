@@ -110,7 +110,6 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
       en: '✉️ Invite friends'
     };
 
-    // If user already has a phone number saved, skip asking for contact again!
     if (user && user.phoneNumber && user.isRegistered) {
       const welcomeBackMsgs = {
         or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
@@ -158,7 +157,6 @@ bot.on('message:contact', async (ctx) => {
     const telegramId = String(ctx.from.id);
     const phoneNumber = ctx.message.contact.phone_number;
 
-    // Immediately save phone number to user profile
     const user = await User.findOneAndUpdate(
       { telegramId },
       { phoneNumber, isRegistered: true },
@@ -220,12 +218,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 }, storage });
 
-// --- HEALTH CHECK ROUTE ---
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'Car Lottery Backend is live!' });
 });
 
-// --- USER PROFILE ENDPOINT ---
 app.get('/api/users/:telegramId', async (req, res) => {
   try {
     const { telegramId } = req.params;
@@ -258,8 +254,6 @@ app.patch('/api/users/:telegramId', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
-// --- LOTTERY MANAGEMENT ENDPOINTS ---
 
 app.get('/api/lotteries', async (req, res) => {
   try {
@@ -308,8 +302,6 @@ app.post('/api/lotteries', async (req, res) => {
   }
 });
 
-// --- ADMIN ORDER MANAGEMENT ENDPOINTS ---
-
 app.get('/api/admin/tickets', async (req, res) => {
   try {
     const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
@@ -320,6 +312,7 @@ app.get('/api/admin/tickets', async (req, res) => {
   }
 });
 
+// 🔒 CRITICAL UPDATE: LOCK TAKEN NUMBERS PERMANENTLY UPON ADMIN APPROVAL
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
   try {
     const ticket = await Ticket.findOneAndUpdate(
@@ -330,6 +323,12 @@ app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
 
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+
+    if (ticket.lotteryId && ticket.selectedNumbers && ticket.selectedNumbers.length > 0) {
+      await Lottery.findByIdAndUpdate(ticket.lotteryId, {
+        $addToSet: { takenNumbers: { $each: ticket.selectedNumbers } }
+      });
     }
 
     if (ticket.telegramId) {
@@ -379,8 +378,6 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
-// --- TICKET & ORDER SUBMISSION ENDPOINTS ---
 
 app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
   try {
@@ -454,9 +451,6 @@ app.get('/api/tickets/user-tickets', async (req, res) => {
   }
 });
 
-// ------------------------------------------------------------------
-// 3. Server Startup & Database Connection
-// ------------------------------------------------------------------
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
