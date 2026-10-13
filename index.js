@@ -312,7 +312,7 @@ app.get('/api/admin/tickets', async (req, res) => {
   }
 });
 
-// 🔒 LOCK TAKEN NUMBERS PERMANENTLY UPON ADMIN APPROVAL
+// 🔒 TYPE-SAFE APPROVAL ROUTE: LOCK ALL SELECTED NUMBERS PERMANENTLY
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
   try {
     const ticket = await Ticket.findOneAndUpdate(
@@ -326,8 +326,9 @@ app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
     }
 
     if (ticket.lotteryId && ticket.selectedNumbers && ticket.selectedNumbers.length > 0) {
+      const numericNumbers = ticket.selectedNumbers.map(n => Number(n));
       await Lottery.findByIdAndUpdate(ticket.lotteryId, {
-        $addToSet: { takenNumbers: {$each: ticket.selectedNumbers } }
+        $addToSet: { takenNumbers: { $each: numericNumbers } }
       });
     }
 
@@ -451,7 +452,7 @@ app.get('/api/tickets/user-tickets', async (req, res) => {
   }
 });
 
-const PORT = process.isMainThread || process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
