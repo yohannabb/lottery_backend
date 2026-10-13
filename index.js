@@ -276,7 +276,11 @@ app.get('/api/lotteries', async (req, res) => {
 
 app.post('/api/lotteries', async (req, res) => {
   try {
-    const newLottery = new Lottery(req.body);
+    const lotteryData = { ...req.body };
+    if (lotteryData.durationDays) {
+      lotteryData.endDate = new Date(Date.now() + Number(lotteryData.durationDays) * 24 * 60 * 60 * 1000).toISOString();
+    }
+    const newLottery = new Lottery(lotteryData);
     await newLottery.save();
     res.status(201).json({ success: true, lottery: newLottery });
   } catch (error) {
@@ -284,12 +288,18 @@ app.post('/api/lotteries', async (req, res) => {
   }
 });
 
-// UPDATE / EDIT LOTTERY ROUTE
+// UPDATE / EDIT LOTTERY ROUTE (Recalculates endDate when durationDays changes)
 app.patch('/api/lotteries/:id', async (req, res) => {
   try {
+    const updateData = { ...req.body };
+    
+    if (updateData.durationDays) {
+      updateData.endDate = new Date(Date.now() + Number(updateData.durationDays) * 24 * 60 * 60 * 1000).toISOString();
+    }
+
     const updatedLottery = await Lottery.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
     if (!updatedLottery) {
