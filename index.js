@@ -79,7 +79,6 @@ bot.command('start', async (ctx) => {
 bot.on('message:text', async (ctx, next) => {
   const text = ctx.message.text || '';
   
-  // Check if message starts with /post (case-insensitive)
   if (text.toLowerCase().startsWith('/post')) {
     try {
       const senderId = String(ctx.from.id).trim();
@@ -90,13 +89,11 @@ bot.on('message:text', async (ctx, next) => {
       console.log(`[POST CHECK] Configured Admin ID: "${adminId}"`);
       console.log(`----------------------------------------`);
 
-      // 🔒 Security Check
       if (senderId !== adminId) {
         await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID.`);
         return;
       }
 
-      // Extract the text after "/post"
       const broadcastText = text.replace(/^\/post\s*/i, '').trim();
 
       if (!broadcastText) {
@@ -142,7 +139,6 @@ bot.on('message:text', async (ctx, next) => {
   return next();
 });
 
-// INTELLIGENT CALLBACK: Checks if phone number exists in DB to prevent asking twice!
 bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
   try {
     const selectedLang = ctx.match[1];
@@ -305,6 +301,19 @@ app.patch('/api/lotteries/:id', async (req, res) => {
   }
 });
 
+// DELETE LOTTERY ROUTE
+app.delete('/api/lotteries/:id', async (req, res) => {
+  try {
+    const deletedLottery = await Lottery.findByIdAndDelete(req.params.id);
+    if (!deletedLottery) {
+      return res.status(404).json({ success: false, message: 'Lottery not found' });
+    }
+    res.json({ success: true, message: 'Lottery deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.get('/api/admin/tickets', async (req, res) => {
   try {
     const tickets = await Ticket.find().sort({ createdAt: -1 }).lean();
@@ -314,7 +323,6 @@ app.get('/api/admin/tickets', async (req, res) => {
   }
 });
 
-// FIXED ADMIN APPROVAL ROUTE: Locks out approved numbers into takenNumbers array
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
   try {
     const ticket = await Ticket.findOne({ orderId: req.params.orderId });
@@ -346,7 +354,6 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
   }
 });
 
-// ADMIN BROADCAST ROUTE
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
     const { message } = req.body;
