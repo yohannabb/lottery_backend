@@ -75,19 +75,23 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// 📢 TELEGRAM /post COMMAND FOR BROADCASTING TO ALL SUBSCRIBERS
+// 📢 ROBUST TELEGRAM /post COMMAND FOR BROADCASTING
 bot.command('post', async (ctx) => {
   try {
     const senderId = String(ctx.from.id);
+    console.log(`[POST COMMAND] Received from Telegram ID: ${senderId}`);
+    console.log(`[POST COMMAND] Configured Admin ID: ${ADMIN_TELEGRAM_ID}`);
 
-    // 🔒 Security Check: Ensure only you (the admin) can run this command
+    // 🔒 Security Check
     if (senderId !== String(ADMIN_TELEGRAM_ID)) {
+      console.log(`[POST COMMAND] Unauthorized access attempt by ${senderId}`);
       await ctx.reply('❌ Unauthorized: Only the administrator can broadcast messages.');
       return;
     }
 
-    // Extract the text after the "/post " command
-    const broadcastText = ctx.match ? ctx.match.trim() : '';
+    // Safely extract the message text from ctx.message.text
+    const fullText = ctx.message.text || '';
+    const broadcastText = fullText.replace(/^\/post\s*/i, '').trim();
 
     if (!broadcastText) {
       await ctx.reply(
@@ -100,13 +104,13 @@ bot.command('post', async (ctx) => {
 
     await ctx.reply('⏳ Broadcasting message to all subscribers...');
 
-    // Fetch all users who have interacted with the bot from MongoDB
+    // Fetch all users from MongoDB
     const users = await User.find({ telegramId: { $exists: true,$ne: null } });
+    console.log(`[POST COMMAND] Found ${users.length} subscribers to broadcast to.`);
 
     let successCount = 0;
     let failCount = 0;
 
-    // Send the message to every subscriber
     for (const user of users) {
       try {
         await bot.api.sendMessage(user.telegramId, broadcastText, { parse_mode: 'Markdown' });
@@ -317,7 +321,7 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
   }
 });
 
-// ADMIN BROADCAST ROUTE (supporting API/Dashboard calls too)
+// ADMIN BROADCAST ROUTE
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
     const { message } = req.body;
