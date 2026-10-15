@@ -74,23 +74,57 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// Strict anti-duplicate lock tracker
-const recentBroadcasts = new Map();
+const processedUpdates = new Set();
+let isBroadcasting = false;
+
+// Helper function to send broadcast (supports optional image URL + text + Buy Now button)
+async function executeBroadcast(imageUrl, broadcastText) {
+  const users = await User.find({ telegramId: { $exists: true,$ne: null } });
+  let successCount = 0;
+  let failCount = 0;
+
+  const broadcastKeyboard = new InlineKeyboard()
+    .webApp('🚗 Buy Now (Open App)', MINI_APP_URL);
+
+  for (const user of users) {
+    try {
+      if (imageUrl && imageUrl.trim() !== '') {
+        // Send Photo with caption and Buy Now button
+        await bot.api.sendPhoto(user.telegramId, imageUrl.trim(), {
+          caption: broadcastText,
+          parse_mode: 'Markdown',
+          reply_markup: broadcastKeyboard
+        });
+      } else {
+        // Send Text only with Buy Now button
+        await bot.api.sendMessage(user.telegramId, broadcastText, { 
+          parse_mode: 'Markdown',
+          reply_markup: broadcastKeyboard
+        });
+      }
+      successCount++;
+    } catch (err) {
+      failCount++;
+    }
+  }
+  return { successCount, failCount };
+}
 
 // 📢 FOOLPROOF TEXT LISTENER FOR /post BROADCASTING
 bot.on('message:text', async (ctx, next) => {
   const text = ctx.message.text || '';
   
   if (text.toLowerCase().startsWith('/post')) {
-    const userId = ctx.from.id;
-    const now = Date.now();
+    const updateId = ctx.update.update_id;
+    const msgId = ctx.message.message_id;
+    const lockKey = `${updateId}-${msgId}`;
 
-    // If this admin sent a /post with identical text within the last 5 seconds, ignore it completely
-    if (recentBroadcasts.has(userId) && (now - recentBroadcasts.get(userId) < 5000)) {
-      console.log(`[DUPLICATE BLOCKED] Ignored duplicate /post trigger from admin ${userId}`);
+    if (processedUpdates.has(lockKey) || isBroadcasting) {
       return;
     }
-    recentBroadcasts.set(userId, now);
+
+    processedUpdates.add(lockKey);
+    setTimeout(() => processedUpdates.delete(lockKey), 120000);
 
     try {
       const senderId = String(ctx.from.id).trim();
@@ -112,26 +146,10 @@ bot.on('message:text', async (ctx, next) => {
         return;
       }
 
+      isBroadcasting = true;
       await ctx.reply('⏳ Broadcasting message to all subscribers...');
 
-      const users = await User.find({ telegramId: { $exists: true,$ne: null } });
-      let successCount = 0;
-      let failCount = 0;
-
-      const broadcastKeyboard = new InlineKeyboard()
-        .webApp('🚗 Buy Now (Open App)', MINI_APP_URL);
-
-      for (const user of users) {
-        try {
-          await bot.api.sendMessage(user.telegramId, broadcastText, { 
-            parse_mode: 'Markdown',
-            reply_markup: broadcastKeyboard
-          });
-          successCount++;
-        } catch (err) {
-          failCount++;
-        }
-      }
+      const { successCount, failCount } = await executeBroadcast(null, broadcastText);
 
       await ctx.reply(
         `✅ *Broadcast Completed Successfully!*\n\n` +
@@ -144,6 +162,8 @@ bot.on('message:text', async (ctx, next) => {
       console.error('Error handling broadcast text:', error);
       await ctx.reply('❌ An error occurred while sending the broadcast.');
       return;
+    } finally {
+      isBroadcasting = false;
     }
   }
 
@@ -299,7 +319,6 @@ app.post('/api/lotteries', async (req, res) => {
   }
 });
 
-// UPDATE / EDIT LOTTERY ROUTE (Recalculates endDate when durationDays changes)
 app.patch('/api/lotteries/:id', async (req, res) => {
   try {
     const updateData = { ...req.body };
@@ -322,7 +341,6 @@ app.patch('/api/lotteries/:id', async (req, res) => {
   }
 });
 
-// DELETE LOTTERY ROUTE
 app.delete('/api/lotteries/:id', async (req, res) => {
   try {
     const deletedLottery = await Lottery.findByIdAndDelete(req.params.id);
@@ -375,31 +393,15 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
   }
 });
 
+// ADMIN BROADCAST API (Supports Image URL + Text + Buy Now Button)
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, imageUrl } = req.body;
     if (!message) {
       return res.status(400).json({ success: false, message: 'Message content is required' });
     }
 
-    const users = await User.find({ telegramId: { $exists: true,$ne: null } });
-    let successCount = 0;
-    let failCount = 0;
-
-    const broadcastKeyboard = new InlineKeyboard()
-      .webApp('🚗 Buy Now (Open App)', MINI_APP_URL);
-
-    for (const user of users) {
-      try {
-        await bot.api.sendMessage(user.telegramId, message, { 
-          parse_mode: 'Markdown',
-          reply_markup: broadcastKeyboard
-        });
-        successCount++;
-      } catch (err) {
-        failCount++;
-      }
-    }
+    const { successCount, failCount } = await executeBroadcast(imageUrl, message);
 
     res.json({ 
       success: true, 
