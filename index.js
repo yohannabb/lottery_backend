@@ -411,6 +411,15 @@ app.post('/api/admin/broadcast', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+// GET TOTAL REGISTERED USERS COUNT
+app.get('/api/admin/user-count', async (req, res) => {
+  try {
+    const count = await User.countDocuments({ isRegistered: true });
+    res.json({ success: true, count });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
   try {
