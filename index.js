@@ -75,11 +75,21 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// 📢 FOOLPROOF TEXT LISTENER FOR /post BROADCASTING
+// Track processed broadcasts to prevent duplicate message delivery
+const processedBroadcasts = new Set();
+
+// 📢 FOOLPROOF TEXT LISTENER FOR /post BROADCASTING (Duplicate Protected + Buy Now Mini App Button)
 bot.on('message:text', async (ctx, next) => {
   const text = ctx.message.text || '';
   
   if (text.toLowerCase().startsWith('/post')) {
+    const msgId = ctx.message.message_id;
+    if (processedBroadcasts.has(msgId)) {
+      return;
+    }
+    processedBroadcasts.add(msgId);
+    setTimeout(() => processedBroadcasts.delete(msgId), 60000);
+
     try {
       const senderId = String(ctx.from.id).trim();
       const adminId = String(ADMIN_TELEGRAM_ID).trim();
@@ -113,9 +123,16 @@ bot.on('message:text', async (ctx, next) => {
       let successCount = 0;
       let failCount = 0;
 
+      // Create the inline keyboard with the "Buy Now" Mini App button
+      const broadcastKeyboard = new InlineKeyboard()
+        .webApp('🚗 Buy Now (Open App)', MINI_APP_URL);
+
       for (const user of users) {
         try {
-          await bot.api.sendMessage(user.telegramId, broadcastText, { parse_mode: 'Markdown' });
+          await bot.api.sendMessage(user.telegramId, broadcastText, { 
+            parse_mode: 'Markdown',
+            reply_markup: broadcastKeyboard 
+          });
           successCount++;
         } catch (err) {
           failCount++;
@@ -123,7 +140,7 @@ bot.on('message:text', async (ctx, next) => {
       }
 
       await ctx.reply(
-        `✅ *Broadcast Completed!*\n\n` +
+        `✅ *Broadcast Completed with 'Buy Now' Button!*\n\n` +
         `📥 *Delivered:* ${successCount}\n` +
         `❌ *Failed:* ${failCount}`,
         { parse_mode: 'Markdown' }
@@ -375,9 +392,15 @@ app.post('/api/admin/broadcast', async (req, res) => {
     let successCount = 0;
     let failCount = 0;
 
+    const broadcastKeyboard = new InlineKeyboard()
+      .webApp('🚗 Buy Now (Open App)', MINI_APP_URL);
+
     for (const user of users) {
       try {
-        await bot.api.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' });
+        await bot.api.sendMessage(user.telegramId, message, { 
+          parse_mode: 'Markdown',
+          reply_markup: broadcastKeyboard
+        });
         successCount++;
       } catch (err) {
         failCount++;
