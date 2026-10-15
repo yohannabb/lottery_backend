@@ -27,7 +27,6 @@ if (!BOT_TOKEN || BOT_TOKEN === 'your_telegram_bot_token_here') {
   process.exit(1);
 }
 
-// Hardcoded fallback to your exact Telegram ID so it works immediately
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '8252809538';
 
 const bot = new Bot(BOT_TOKEN);
@@ -75,29 +74,27 @@ bot.command('start', async (ctx) => {
   }
 });
 
-// Track processed broadcasts to prevent duplicate message delivery
-const processedBroadcasts = new Set();
+// Strict anti-duplicate lock tracker
+const recentBroadcasts = new Map();
 
-// 📢 FOOLPROOF TEXT LISTENER FOR /post BROADCASTING (Duplicate Protected + Buy Now Mini App Button)
+// 📢 FOOLPROOF TEXT LISTENER FOR /post BROADCASTING
 bot.on('message:text', async (ctx, next) => {
   const text = ctx.message.text || '';
   
   if (text.toLowerCase().startsWith('/post')) {
-    const msgId = ctx.message.message_id;
-    if (processedBroadcasts.has(msgId)) {
+    const userId = ctx.from.id;
+    const now = Date.now();
+
+    // If this admin sent a /post with identical text within the last 5 seconds, ignore it completely
+    if (recentBroadcasts.has(userId) && (now - recentBroadcasts.get(userId) < 5000)) {
+      console.log(`[DUPLICATE BLOCKED] Ignored duplicate /post trigger from admin ${userId}`);
       return;
     }
-    processedBroadcasts.add(msgId);
-    setTimeout(() => processedBroadcasts.delete(msgId), 60000);
+    recentBroadcasts.set(userId, now);
 
     try {
       const senderId = String(ctx.from.id).trim();
       const adminId = String(ADMIN_TELEGRAM_ID).trim();
-
-      console.log(`----------------------------------------`);
-      console.log(`[POST CHECK] Sender Telegram ID: "${senderId}"`);
-      console.log(`[POST CHECK] Configured Admin ID: "${adminId}"`);
-      console.log(`----------------------------------------`);
 
       if (senderId !== adminId) {
         await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID.`);
@@ -118,12 +115,9 @@ bot.on('message:text', async (ctx, next) => {
       await ctx.reply('⏳ Broadcasting message to all subscribers...');
 
       const users = await User.find({ telegramId: { $exists: true,$ne: null } });
-      console.log(`[POST COMMAND] Found ${users.length} subscribers to broadcast to.`);
-
       let successCount = 0;
       let failCount = 0;
 
-      // Create the inline keyboard with the "Buy Now" Mini App button
       const broadcastKeyboard = new InlineKeyboard()
         .webApp('🚗 Buy Now (Open App)', MINI_APP_URL);
 
@@ -131,7 +125,7 @@ bot.on('message:text', async (ctx, next) => {
         try {
           await bot.api.sendMessage(user.telegramId, broadcastText, { 
             parse_mode: 'Markdown',
-            reply_markup: broadcastKeyboard 
+            reply_markup: broadcastKeyboard
           });
           successCount++;
         } catch (err) {
@@ -140,7 +134,7 @@ bot.on('message:text', async (ctx, next) => {
       }
 
       await ctx.reply(
-        `✅ *Broadcast Completed with 'Buy Now' Button!*\n\n` +
+        `✅ *Broadcast Completed Successfully!*\n\n` +
         `📥 *Delivered:* ${successCount}\n` +
         `❌ *Failed:* ${failCount}`,
         { parse_mode: 'Markdown' }
