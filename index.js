@@ -36,6 +36,52 @@ bot.catch((err) => {
   console.error(`❌ Bot Error:`, err.error);
 });
 
+// 🌐 MULTI-LANGUAGE STRINGS DICTIONARY
+const LOCALES = {
+  en: {
+    welcome: "🚗 *Getachew Fikadu Jirata*\n\nWelcome to our Bot.\nPlease select your language.",
+    phonePrompt: "Please share your phone number.",
+    shareButton: "📱 Share my phone",
+    phoneConfirmed: "✅ Phone number confirmed.",
+    tapOpenApp: "👇 Tap below to open the app.",
+    appBtn: "🚗 Open App",
+    inviteBtn: "✉️ Invite friends",
+    welcomeBack: "👋 Welcome back! Open the app below.",
+    unauthorized: "❌ Unauthorized: Your ID does not match the configured admin ID.",
+    broadcastUsage: "⚠️ *Usage:* Please include the text to broadcast.\n\nExample:\n`/post 🚨 New car added! Open the app to select your numbers.`",
+    broadcasting: "⏳ Broadcasting message to all subscribers...",
+    broadcastDone: "✅ *Broadcast Completed Successfully!*\n\n📥 *Delivered:* {success}\n❌ *Failed:* {fail}"
+  },
+  or: {
+    welcome: "🚗 *Getachew Fikadu Jirata*\n\nBaga gara Bot keenyaa dhuftan.\nMaaloo Afaan filadhaa.",
+    phonePrompt: "Maaloo lakkoofsa bilbilaa keessan ergaa.",
+    shareButton: "📱 Lakkoofsa bilbilaa ergi",
+    phoneConfirmed: "✅ Lakkoofsi bilbilaa mirkanaa'eera.",
+    tapOpenApp: "👇 Appicha banachuuf gadi tuqaa.",
+    appBtn: "🚗 App Banadhu",
+    inviteBtn: "✉️ Hiriyoota affeeri",
+    welcomeBack: "👋 Baga deebitan! Appichaa gaditi banadhaa.",
+    unauthorized: "❌ Hayyama hin qabdu: ID keessan admin wajjin wal hin simu.",
+    broadcastUsage: "⚠️ *Fayyadamni:* Ergaa dabarsuu barbaaddu barreessaa.\n\nFakkeenyaaf:\n`/post 🚨 Motooriin haaraan dhufeera!`",
+    broadcasting: "⏳ Ergaa hundaaf dabarsaa jira...",
+    broadcastDone: "✅ *Ergaan milkaa'inaan darbeera!*\n\n📥 *Kan qaqqabe:* {success}\n❌ *Kan kufu:* {fail}"
+  },
+  am: {
+    welcome: "🚗 *ጌታቸው ፋቃዱ ጅራታ*\n\nወደ ቦታችን እንኳን በደህና መጡ።\nእባክዎ ቋንቋ ይምረጡ።",
+    phonePrompt: "እባክዎ ስልክ ቁጥርዎን ያካፍሉ።",
+    shareButton: "📱 ስልክ ቁጥር ያካፍሉ",
+    phoneConfirmed: "✅ ስልክ ቁጥርዎ ተረጋግጧል።",
+    tapOpenApp: "👇 መተግበሪያውን ለመክፈት ከታች ያለውን ይጫኑ።",
+    appBtn: "🚗 መተግበሪያውን ክፈት",
+    inviteBtn: "✉️ ጓደኞችን ይጋብዙ",
+    welcomeBack: "👋 እንኳን ደስ ብሎዎት! መተግበሪያውን ከታች ይክፈቱ።",
+    unauthorized: "❌ ፈቃድ የለዎትም: መታወቂያዎ ከአድሚን ጋር አይዛመድም።",
+    broadcastUsage: "⚠️ *አጠቃቀም:* ለተጠቃሚዎች ማስተላለፍ የሚፈልጉትን ጽሁፍ ያካትቱ።\n\nምሳሌ:\n`/post 🚨 አዲስ መኪና ገብቷል!`",
+    broadcasting: "⏳ መልዕክቱ ለሁሉም ተጠቃሚዎች እየተላለፈ ነው...",
+    broadcastDone: "✅ *መልዕክት ማስተላለፍ ተጠናቋል!*\n\n📥 *የደረሰው:* {success}\n❌ *ያልደረሰው:* {fail}"
+  }
+};
+
 bot.command('start', async (ctx) => {
   try {
     const telegramId = String(ctx.from.id);
@@ -49,23 +95,15 @@ bot.command('start', async (ctx) => {
       });
     }
 
-    const welcomeMessage = 
-      `🚗 *Getachew Fikadu Jirata*\n\n` +
-      `Baga gara Bot keenyaa dhuftan.\n` +
-      `ወደ Bot'ችን እንኳን በደህና መጡ።\n` +
-      `Welcome to our Bot.\n\n` +
-      `Maaloo Afaan filadhaa.\n` +
-      `━━━━━━━━━━━━━━━━━━━\n` +
-      `እባክዎ ቋንቋ ይምረጡ።\n` +
-      `━━━━━━━━━━━━━━━━━━━\n` +
-      `Please select your language.`;
+    const lang = user.language || 'en';
+    const text = LOCALES[lang] ? LOCALES[lang].welcome : LOCALES['en'].welcome;
 
     const keyboard = new InlineKeyboard()
       .text('🇪🇹 Afaan Oromo', 'lang_or').row()
       .text('🇪🇹 አማርኛ', 'lang_am').row()
       .text('🇬🇧 English', 'lang_en');
 
-    await ctx.reply(welcomeMessage, {
+    await ctx.reply(text, {
       parse_mode: 'Markdown',
       reply_markup: keyboard
     });
@@ -77,26 +115,26 @@ bot.command('start', async (ctx) => {
 const processedUpdates = new Set();
 let isBroadcasting = false;
 
-// Helper function to send broadcast (supports optional image URL + text + Buy Now button)
 async function executeBroadcast(imageUrl, broadcastText) {
   const users = await User.find({ telegramId: { $exists: true,$ne: null } });
   let successCount = 0;
   let failCount = 0;
 
-  const broadcastKeyboard = new InlineKeyboard()
-    .webApp('🚗 Buy Now (Open App)', MINI_APP_URL);
-
   for (const user of users) {
+    const lang = user.language || 'en';
+    const appBtnText = LOCALES[lang] ? LOCALES[lang].appBtn : LOCALES['en'].appBtn;
+    
+    const broadcastKeyboard = new InlineKeyboard()
+      .webApp(appBtnText, MINI_APP_URL);
+
     try {
       if (imageUrl && imageUrl.trim() !== '') {
-        // Send Photo with caption and Buy Now button
         await bot.api.sendPhoto(user.telegramId, imageUrl.trim(), {
           caption: broadcastText,
           parse_mode: 'Markdown',
           reply_markup: broadcastKeyboard
         });
       } else {
-        // Send Text only with Buy Now button
         await bot.api.sendMessage(user.telegramId, broadcastText, { 
           parse_mode: 'Markdown',
           reply_markup: broadcastKeyboard
@@ -131,30 +169,26 @@ bot.on('message:text', async (ctx, next) => {
       const adminId = String(ADMIN_TELEGRAM_ID).trim();
 
       if (senderId !== adminId) {
-        await ctx.reply(`❌ Unauthorized: Your ID (${senderId}) does not match the configured admin ID.`);
+        await ctx.reply(LOCALES['en'].unauthorized);
         return;
       }
 
       const broadcastText = text.replace(/^\/post\s*/i, '').trim();
 
       if (!broadcastText) {
-        await ctx.reply(
-          '⚠️ *Usage:* Please include the text to broadcast.\n\n' +
-          'Example:\n`/post 🚨 New car added! Open the app to select your numbers.`',
-          { parse_mode: 'Markdown' }
-        );
+        await ctx.reply(LOCALES['en'].broadcastUsage, { parse_mode: 'Markdown' });
         return;
       }
 
       isBroadcasting = true;
-      await ctx.reply('⏳ Broadcasting message to all subscribers...');
+      await ctx.reply(LOCALES['en'].broadcasting);
 
       const { successCount, failCount } = await executeBroadcast(null, broadcastText);
 
       await ctx.reply(
-        `✅ *Broadcast Completed Successfully!*\n\n` +
-        `📥 *Delivered:* ${successCount}\n` +
-        `❌ *Failed:* ${failCount}`,
+        LOCALES['en'].broadcastDone
+          .replace('{success}', successCount)
+          .replace('{fail}', failCount),
         { parse_mode: 'Markdown' }
       );
       return;
@@ -182,45 +216,25 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
     );
     await ctx.answerCallbackQuery();
 
+    const locale = LOCALES[selectedLang] || LOCALES['en'];
     const botUsername = ctx.me.username;
-    const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%20our%20Car%20Lottery!`;
-
-    const appBtnTexts = { or: '🚗 App Banadhu', am: '🚗 መተግበሪያውን ክፈት', en: '🚗 Getachew Fikadu app' };
-    const inviteBtnTexts = { or: '✉️ Hiriyoota affeeri', am: '✉️ ጓደኞችን ይጋብዙ', en: '✉️ Invite friends' };
+    const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%2520our%2520Car%2520Lottery!`;
 
     if (user && user.phoneNumber && user.phoneNumber.trim() !== '') {
-      const welcomeBackMsgs = {
-        or: '👋 Baga deebitan! Appichaa gaditi banadhaa.',
-        am: '👋 እንኳን ደስ ብሎዎት! መተግበሪያውን ከታች ይክፈቱ።',
-        en: '👋 Welcome back! Open the app below.'
-      };
-
       const inlineKeyboard = new InlineKeyboard()
-        .webApp(appBtnTexts[selectedLang], MINI_APP_URL).row()
-        .url(inviteBtnTexts[selectedLang], inviteLink);
+        .webApp(locale.appBtn, MINI_APP_URL).row()
+        .url(locale.inviteBtn, inviteLink);
 
-      await ctx.reply(welcomeBackMsgs[selectedLang], { reply_markup: inlineKeyboard });
+      await ctx.reply(locale.welcomeBack, { reply_markup: inlineKeyboard });
       return;
     }
 
-    const prompts = {
-      or: 'Maaloo lakkoofsa bilbilaa keessan ergaa.',
-      am: 'እባክዎ ስልክ ቁጥርዎን ያካፍሉ።',
-      en: 'Please share your phone number.'
-    };
-
-    const buttonTexts = {
-      or: '📱 Lakkoofsa bilbilaa ergi',
-      am: '📱 ስልክ ቁጥር ያካፍሉ',
-      en: '📱 Share my phone'
-    };
-
     const contactKeyboard = new Keyboard()
-      .requestContact(buttonTexts[selectedLang])
+      .requestContact(locale.shareButton)
       .resized()
       .oneTime();
 
-    await ctx.reply(prompts[selectedLang], { reply_markup: contactKeyboard });
+    await ctx.reply(locale.phonePrompt, { reply_markup: contactKeyboard });
   } catch (error) {
     console.error('Error in language callback:', error);
   }
@@ -238,19 +252,18 @@ bot.on('message:contact', async (ctx) => {
     );
 
     const lang = user ? user.language : 'en';
-    const appBtnTexts = { or: '🚗 App Banadhu', am: '🚗 መተግበሪያውን ክፈት', en: '🚗 Getachew Fikadu app' };
-    const inviteBtnTexts = { or: '✉️ Hiriyoota affeeri', am: '✉️ ጓደኞችን ይጋብዙ', en: '✉️ Invite friends' };
+    const locale = LOCALES[lang] || LOCALES['en'];
 
-    await ctx.reply('✅ Phone number confirmed.', { reply_markup: { remove_keyboard: true } });
+    await ctx.reply(locale.phoneConfirmed, { reply_markup: { remove_keyboard: true } });
 
     const botUsername = ctx.me.username;
-    const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%20our%20Car%20Lottery!`;
+    const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%2520our%2520Car%2520Lottery!`;
 
     const inlineKeyboard = new InlineKeyboard()
-      .webApp(appBtnTexts[lang], MINI_APP_URL).row()
-      .url(inviteBtnTexts[lang], inviteLink);
+      .webApp(locale.appBtn, MINI_APP_URL).row()
+      .url(locale.inviteBtn, inviteLink);
 
-    await ctx.reply('👇 Tap below to open the app.', { reply_markup: inlineKeyboard });
+    await ctx.reply(locale.tapOpenApp, { reply_markup: inlineKeyboard });
   } catch (error) {
     console.error('Error in contact handler:', error);
   }
@@ -263,6 +276,15 @@ const storage = multer.diskStorage({
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 }, storage });
 
 app.get('/', (req, res) => res.json({ success: true, message: 'Backend live' }));
+
+app.get('/api/admin/user-count', async (req, res) => {
+  try {
+    const count = await User.countDocuments({ isRegistered: true });
+    res.json({ success: true, count });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 app.get('/api/users/:telegramId', async (req, res) => {
   try {
@@ -393,7 +415,6 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
   }
 });
 
-// ADMIN BROADCAST API (Supports Image URL + Text + Buy Now Button)
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
     const { message, imageUrl } = req.body;
@@ -407,15 +428,6 @@ app.post('/api/admin/broadcast', async (req, res) => {
       success: true, 
       message: `Broadcast complete! Successfully sent: ${successCount}, Failed: ${failCount}` 
     });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-// GET TOTAL REGISTERED USERS COUNT
-app.get('/api/admin/user-count', async (req, res) => {
-  try {
-    const count = await User.countDocuments({ isRegistered: true });
-    res.json({ success: true, count });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -446,10 +458,10 @@ app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
 app.get('/api/tickets/user-tickets', async (req, res) => {
   try {
     const { phoneNumber, telegramId } = req.query;
-    const query = {};
-    if (phoneNumber) query.phoneNumber = phoneNumber;
-    if (telegramId) query.telegramId = String(telegramId);
-    const tickets = await Ticket.find(query).populate('lotteryId').sort({ createdAt: -1 });
+    const keyQuery = {};
+    if (phoneNumber) keyQuery.phoneNumber = phoneNumber;
+    if (telegramId) keyQuery.telegramId = String(telegramId);
+    const tickets = await Ticket.find(keyQuery).populate('lotteryId').sort({ createdAt: -1 });
     res.json({ success: true, tickets });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
