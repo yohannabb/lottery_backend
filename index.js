@@ -435,20 +435,69 @@ app.post('/api/admin/broadcast', async (req, res) => {
 
 app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
   try {
-    const { lotteryId, telegramId, fullName, phoneNumber, selectedNumbers, isQuickPick, ticketCount, totalPrice, senderAccount } = req.body;
+    const { 
+      lotteryId, 
+      telegramId, 
+      fullName, 
+      phoneNumber, 
+      selectedNumbers, 
+      isQuickPick, 
+      ticketCount, 
+      totalPrice, 
+      senderAccount 
+    } = req.body;
+
     const parsedNumbers = selectedNumbers ? JSON.parse(selectedNumbers) : [];
     const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
     const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
 
     const newTicket = new Ticket({
-      orderId, lotteryId, telegramId: String(telegramId), fullName,
+      orderId, 
+      lotteryId, 
+      telegramId: String(telegramId), 
+      fullName,
       phoneNumber: phoneNumber || '+251900000000',
-      selectedNumbers: parsedNumbers, isQuickPick: isQuickPick === 'true',
-      ticketCount: Number(ticketCount), totalPrice: Number(totalPrice),
-      senderAccount, receiptUrl, status: 'PENDING REVIEW'
+      selectedNumbers: parsedNumbers, 
+      isQuickPick: isQuickPick === 'true',
+      ticketCount: Number(ticketCount), 
+      totalPrice: Number(totalPrice),
+      senderAccount, 
+      receiptUrl, 
+      status: 'PENDING REVIEW'
     });
 
     await newTicket.save();
+
+    // 🔔 INSTANT ADMIN NOTIFICATION TO YOUR TELEGRAM ACCOUNT
+    try {
+      const adminMessage = 
+        `🚨 *NEW TICKET ORDER RECEIVED!*\n\n` +
+        `🆔 *Order ID:* \`${orderId}\`\n` +
+        `👤 *Name:* ${fullName || 'N/A'}\n` +
+        `📞 *Phone:* \`${phoneNumber || 'N/A'}\`\n` +
+        `🎟️ *Tickets Count:* ${ticketCount}\n` +
+        `🔢 *Numbers:* ${parsedNumbers.length > 0 ? parsedNumbers.join(', ') : 'Quick Pick'}\n` +
+        `💵 *Total Price:* ${totalPrice} Birr\n` +
+        `💳 *Sender Account:* \`${senderAccount || 'N/A'}\`\n\n` +
+        `📌 _Open your Admin Dashboard to approve or reject this order._`;
+
+      const adminId = String(ADMIN_TELEGRAM_ID).trim();
+
+      if (receiptUrl) {
+        const fullReceiptUrl = `${req.protocol}://${req.get('host')}${receiptUrl}`;
+        await bot.api.sendPhoto(adminId, fullReceiptUrl, {
+          caption: adminMessage,
+          parse_mode: 'Markdown'
+        });
+      } else {
+        await bot.api.sendMessage(adminId, adminMessage, {
+          parse_mode: 'Markdown'
+        });
+      }
+    } catch (notifErr) {
+      console.error('⚠️ Failed to send admin notification:', notifErr.message);
+    }
+
     res.status(201).json({ success: true, orderId, ticket: newTicket });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
