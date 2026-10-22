@@ -10,8 +10,6 @@ const { Bot, InlineKeyboard, Keyboard } = require('grammy');
 const User = require('./models/User');
 const Ticket = require('./models/Ticket');
 const Lottery = require('./models/Lottery');
-
-// Import modular routes if you use them, or keep them consolidated here cleanly
 const ticketRoutes = require('./routes/tickets'); 
 
 const app = express();
@@ -88,7 +86,6 @@ const LOCALES = {
 bot.command('start', async (ctx) => {
   try {
     const telegramId = String(ctx.from.id);
-
     let user = await User.findOne({ telegramId });
     if (!user) {
       user = await User.create({
@@ -97,19 +94,14 @@ bot.command('start', async (ctx) => {
         username: ctx.from.username || ''
       });
     }
-
     const lang = user.language || 'en';
     const text = LOCALES[lang] ? LOCALES[lang].welcome : LOCALES['en'].welcome;
-
     const keyboard = new InlineKeyboard()
       .text('🇪🇹 Afaan Oromo', 'lang_or').row()
       .text('🇪🇹 አማርኛ', 'lang_am').row()
       .text('🇬🇧 English', 'lang_en');
 
-    await ctx.reply(text, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard
-    });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
   } catch (error) {
     console.error('Error in /start command:', error);
   }
@@ -126,9 +118,7 @@ async function executeBroadcast(imageUrl, broadcastText) {
   for (const user of users) {
     const lang = user.language || 'en';
     const appBtnText = LOCALES[lang] ? LOCALES[lang].appBtn : LOCALES['en'].appBtn;
-    
-    const broadcastKeyboard = new InlineKeyboard()
-      .webApp(appBtnText, MINI_APP_URL);
+    const broadcastKeyboard = new InlineKeyboard().webApp(appBtnText, MINI_APP_URL);
 
     try {
       if (imageUrl && imageUrl.trim() !== '') {
@@ -151,19 +141,14 @@ async function executeBroadcast(imageUrl, broadcastText) {
   return { successCount, failCount };
 }
 
-// 📢 FOOLPROOF TEXT LISTENER FOR /post BROADCASTING
 bot.on('message:text', async (ctx, next) => {
   const text = ctx.message.text || '';
-  
   if (text.toLowerCase().startsWith('/post')) {
     const updateId = ctx.update.update_id;
     const msgId = ctx.message.message_id;
     const lockKey = `${updateId}-${msgId}`;
 
-    if (processedUpdates.has(lockKey) || isBroadcasting) {
-      return;
-    }
-
+    if (processedUpdates.has(lockKey) || isBroadcasting) return;
     processedUpdates.add(lockKey);
     setTimeout(() => processedUpdates.delete(lockKey), 120000);
 
@@ -177,7 +162,6 @@ bot.on('message:text', async (ctx, next) => {
       }
 
       const broadcastText = text.replace(/^\/post\s*/i, '').trim();
-
       if (!broadcastText) {
         await ctx.reply(LOCALES['en'].broadcastUsage, { parse_mode: 'Markdown' });
         return;
@@ -185,7 +169,6 @@ bot.on('message:text', async (ctx, next) => {
 
       isBroadcasting = true;
       await ctx.reply(LOCALES['en'].broadcasting);
-
       const { successCount, failCount } = await executeBroadcast(null, broadcastText);
 
       await ctx.reply(
@@ -203,7 +186,6 @@ bot.on('message:text', async (ctx, next) => {
       isBroadcasting = false;
     }
   }
-
   return next();
 });
 
@@ -211,7 +193,6 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
   try {
     const selectedLang = ctx.match[1];
     const telegramId = String(ctx.from.id);
-
     const user = await User.findOneAndUpdate(
       { telegramId }, 
       { language: selectedLang },
@@ -227,16 +208,11 @@ bot.callbackQuery(/^lang_(or|am|en)$/, async (ctx) => {
       const inlineKeyboard = new InlineKeyboard()
         .webApp(locale.appBtn, MINI_APP_URL).row()
         .url(locale.inviteBtn, inviteLink);
-
       await ctx.reply(locale.welcomeBack, { reply_markup: inlineKeyboard });
       return;
     }
 
-    const contactKeyboard = new Keyboard()
-      .requestContact(locale.shareButton)
-      .resized()
-      .oneTime();
-
+    const contactKeyboard = new Keyboard().requestContact(locale.shareButton).resized().oneTime();
     await ctx.reply(locale.phonePrompt, { reply_markup: contactKeyboard });
   } catch (error) {
     console.error('Error in language callback:', error);
@@ -247,7 +223,6 @@ bot.on('message:contact', async (ctx) => {
   try {
     const telegramId = String(ctx.from.id);
     const phoneNumber = ctx.message.contact.phone_number;
-
     const user = await User.findOneAndUpdate(
       { telegramId },
       { phoneNumber, isRegistered: true },
@@ -256,12 +231,10 @@ bot.on('message:contact', async (ctx) => {
 
     const lang = user ? user.language : 'en';
     const locale = LOCALES[lang] || LOCALES['en'];
-
     await ctx.reply(locale.phoneConfirmed, { reply_markup: { remove_keyboard: true } });
 
     const botUsername = ctx.me.username;
     const inviteLink = `https://t.me/share/url?url=https://t.me/${botUsername}?start=ref_${telegramId}&text=Join%2520our%2520Car%2520Lottery!`;
-
     const inlineKeyboard = new InlineKeyboard()
       .webApp(locale.appBtn, MINI_APP_URL).row()
       .url(locale.inviteBtn, inviteLink);
@@ -330,16 +303,12 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
-// 🚗 ADD NEW CAR: WIPES OLD CARS & TICKETS AUTOMATICALLY FOR A CLEAN SLATE
+// 🚗 ADD NEW CAR: AUTOMATICALLY WIPES OLD CARS & TICKETS FOR A FRESH 0 SOLD SLATE[cite: 12]
 app.post('/api/lotteries', async (req, res) => {
   try {
-    // 1. Wipe previous lotteries/cars so old cars don't stick around
-    await Lottery.deleteMany({});
+    await Lottery.deleteMany({}); // Wipe previous cars[cite: 12]
+    await Ticket.deleteMany({});  // Wipe previous tickets[cite: 12]
 
-    // 2. Wipe previous ticket orders so old numbers and selections are cleared out
-    await Ticket.deleteMany({});
-
-    // 3. Create the new lottery with fresh 0 sold tickets and empty taken numbers array
     const lotteryData = { 
       title: req.body.title,
       color: req.body.color,
@@ -367,19 +336,11 @@ app.post('/api/lotteries', async (req, res) => {
 app.patch('/api/lotteries/:id', async (req, res) => {
   try {
     const updateData = { ...req.body };
-    
     if (updateData.durationDays) {
       updateData.endDate = new Date(Date.now() + Number(updateData.durationDays) * 24 * 60 * 60 * 1000).toISOString();
     }
-
-    const updatedLottery = await Lottery.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-    if (!updatedLottery) {
-      return res.status(404).json({ success: false, message: 'Lottery not found' });
-    }
+    const updatedLottery = await Lottery.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
+    if (!updatedLottery) return res.status(404).json({ success: false, message: 'Lottery not found' });
     res.json({ success: true, lottery: updatedLottery });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -389,9 +350,7 @@ app.patch('/api/lotteries/:id', async (req, res) => {
 app.delete('/api/lotteries/:id', async (req, res) => {
   try {
     const deletedLottery = await Lottery.findByIdAndDelete(req.params.id);
-    if (!deletedLottery) {
-      return res.status(404).json({ success: false, message: 'Lottery not found' });
-    }
+    if (!deletedLottery) return res.status(404).json({ success: false, message: 'Lottery not found' });
     res.json({ success: true, message: 'Lottery deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -410,9 +369,7 @@ app.get('/api/admin/tickets', async (req, res) => {
 app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
   try {
     const ticket = await Ticket.findOne({ orderId: req.params.orderId });
-    if (!ticket) {
-      return res.status(404).json({ success: false, message: 'Ticket not found' });
-    }
+    if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
 
     if (ticket.status !== 'APPROVED') {
       ticket.status = 'APPROVED';
@@ -423,7 +380,6 @@ app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
         $inc: { soldTickets: ticket.selectedNumbers.length }
       });
     }
-
     res.json({ success: true, ticket });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -442,22 +398,15 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
     const { message, imageUrl } = req.body;
-    if (!message) {
-      return res.status(400).json({ success: false, message: 'Message content is required' });
-    }
+    if (!message) return res.status(400).json({ success: false, message: 'Message content is required' });
 
     const { successCount, failCount } = await executeBroadcast(imageUrl, message);
-
-    res.json({ 
-      success: true, 
-      message: `Broadcast complete! Successfully sent: ${successCount}, Failed: ${failCount}` 
-    });
+    res.json({ success: true, message: `Broadcast complete! Successfully sent: ${successCount}, Failed: ${failCount}` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Use modular ticket routes or keep them here cleanly without duplicates
 app.use('/api/tickets', ticketRoutes);
 
 const PORT = process.env.PORT || 5000;
