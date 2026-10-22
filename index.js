@@ -303,11 +303,11 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
-// 🚗 ADD NEW CAR: AUTOMATICALLY WIPES OLD CARS & TICKETS FOR A FRESH 0 SOLD SLATE[cite: 12]
+// 🚗 ADD NEW CAR: AUTOMATICALLY WIPES OLD CARS & TICKETS FOR A FRESH 0 SOLD SLATE
 app.post('/api/lotteries', async (req, res) => {
   try {
-    await Lottery.deleteMany({}); // Wipe previous cars[cite: 12]
-    await Ticket.deleteMany({});  // Wipe previous tickets[cite: 12]
+    await Lottery.deleteMany({}); // Wipe previous cars
+    await Ticket.deleteMany({});  // Wipe previous tickets
 
     const lotteryData = { 
       title: req.body.title,
