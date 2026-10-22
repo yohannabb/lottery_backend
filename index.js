@@ -327,18 +327,22 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
-// 🚗 ADD NEW CAR LOTTERY ROUTE (Forced soldTickets: 0 and takenNumbers: [])
+// 🚗 STRICTLY FORCED ZERO SOLD TICKETS & EMPTY TAKEN NUMBERS FOR NEW CARS
 app.post('/api/lotteries', async (req, res) => {
   try {
     const lotteryData = { 
-      ...req.body,
-      soldTickets: 0,       // 👈 Forces new cars to start at 0 sold tickets
-      takenNumbers: []      // 👈 Forces new cars to start with empty taken numbers
+      title: req.body.title,
+      color: req.body.color,
+      imageUrl: req.body.imageUrl,
+      ticketPrice: Number(req.body.ticketPrice),
+      totalTickets: Number(req.body.totalTickets),
+      isFeatured: req.body.isFeatured !== undefined ? req.body.isFeatured : true,
+      soldTickets: 0,       // 👈 Strictly enforced to 0
+      takenNumbers: [],     // 👈 Strictly enforced to empty array
+      endDate: req.body.durationDays 
+        ? new Date(Date.now() + Number(req.body.durationDays) * 24 * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     };
-
-    if (lotteryData.durationDays) {
-      lotteryData.endDate = new Date(Date.now() + Number(lotteryData.durationDays) * 24 * 60 * 60 * 1000).toISOString();
-    }
 
     const newLottery = new Lottery(lotteryData);
     await newLottery.save();

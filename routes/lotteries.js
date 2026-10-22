@@ -1,16 +1,17 @@
-const express = require('express');
-const router = express.Router();
-const Lottery = require('../models/Lottery');
+const mongoose = require('mongoose');
 
-// Get active/featured lottery
-router.get('/featured', async (req, res) => {
-  try {
-    const lottery = await Lottery.findOne({ isFeatured: true, status: 'active' });
-    if (!lottery) return res.status(404).json({ message: 'No active lottery found' });
-    res.json(lottery);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+const lotterySchema = new mongoose.Schema({
+  title: { type: String, required: { true: true } }, 
+  color: { type: String, required: true }, 
+  imageUrl: { type: String, required: true },
+  ticketPrice: { type: Number, required: true }, 
+  totalTickets: { type: Number, required: true }, 
+  soldTickets: { type: Number, default: 0 },
+  takenNumbers: { type: [Number], default: [] }, // 👈 Added takenNumbers array back properly
+  endDate: { type: Date, required: true },
+  isFeatured: { type: Boolean, default: false },
+  status: { type: String, enum: ['active', 'completed', 'cancelled'], default: 'active' },
+  createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = router;
+module.exports = mongoose.model('Lottery', lotterySchema);
