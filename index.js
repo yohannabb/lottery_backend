@@ -116,7 +116,7 @@ const processedUpdates = new Set();
 let isBroadcasting = false;
 
 async function executeBroadcast(imageUrl, broadcastText) {
-  const users = await User.find({ telegramId: { $exists: true,$ne: null } });
+  const users = await User.find({ telegramId: { $exists: true, $ne: null } });
   let successCount = 0;
   let failCount = 0;
 
@@ -327,12 +327,19 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
+// 🚗 ADD NEW CAR LOTTERY ROUTE (Forced soldTickets: 0 and takenNumbers: [])
 app.post('/api/lotteries', async (req, res) => {
   try {
-    const lotteryData = { ...req.body };
+    const lotteryData = { 
+      ...req.body,
+      soldTickets: 0,       // 👈 Forces new cars to start at 0 sold tickets
+      takenNumbers: []      // 👈 Forces new cars to start with empty taken numbers
+    };
+
     if (lotteryData.durationDays) {
       lotteryData.endDate = new Date(Date.now() + Number(lotteryData.durationDays) * 24 * 60 * 60 * 1000).toISOString();
     }
+
     const newLottery = new Lottery(lotteryData);
     await newLottery.save();
     res.status(201).json({ success: true, lottery: newLottery });
@@ -396,7 +403,8 @@ app.patch('/api/admin/tickets/:orderId/approve', async (req, res) => {
       await ticket.save();
 
       await Lottery.findByIdAndUpdate(ticket.lotteryId, {
-        $push: { takenNumbers: { $each: ticket.selectedNumbers } },$inc: { soldTickets: ticket.selectedNumbers.length }
+        $push: { takenNumbers: { $each: ticket.selectedNumbers } },
+        $inc: { soldTickets: ticket.selectedNumbers.length }
       });
     }
 
