@@ -11,6 +11,9 @@ const User = require('./models/User');
 const Ticket = require('./models/Ticket');
 const Lottery = require('./models/Lottery');
 
+// Import modular routes if you use them, or keep them consolidated here cleanly
+const ticketRoutes = require('./routes/tickets'); 
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -327,9 +330,16 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
-// 🚗 STRICTLY FORCED ZERO SOLD TICKETS & EMPTY TAKEN NUMBERS FOR NEW CARS
+// 🚗 ADD NEW CAR: WIPES OLD CARS & TICKETS AUTOMATICALLY FOR A CLEAN SLATE
 app.post('/api/lotteries', async (req, res) => {
   try {
+    // 1. Wipe previous lotteries/cars so old cars don't stick around
+    await Lottery.deleteMany({});
+
+    // 2. Wipe previous ticket orders so old numbers and selections are cleared out
+    await Ticket.deleteMany({});
+
+    // 3. Create the new lottery with fresh 0 sold tickets and empty taken numbers array
     const lotteryData = { 
       title: req.body.title,
       color: req.body.color,
@@ -337,8 +347,8 @@ app.post('/api/lotteries', async (req, res) => {
       ticketPrice: Number(req.body.ticketPrice),
       totalTickets: Number(req.body.totalTickets),
       isFeatured: req.body.isFeatured !== undefined ? req.body.isFeatured : true,
-      soldTickets: 0,       // 👈 Strictly enforced to 0
-      takenNumbers: [],     // 👈 Strictly enforced to empty array
+      soldTickets: 0,       
+      takenNumbers: [],     
       endDate: req.body.durationDays 
         ? new Date(Date.now() + Number(req.body.durationDays) * 24 * 60 * 60 * 1000).toISOString()
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -346,6 +356,8 @@ app.post('/api/lotteries', async (req, res) => {
 
     const newLottery = new Lottery(lotteryData);
     await newLottery.save();
+    
+    console.log('🧹 Old cars and tickets wiped. Fresh new lottery posted successfully!');
     res.status(201).json({ success: true, lottery: newLottery });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -445,89 +457,8 @@ app.post('/api/admin/broadcast', async (req, res) => {
   }
 });
 
-app.post('/api/tickets/order', upload.single('receipt'), async (req, res) => {
-  try {
-    const { 
-      lotteryId, 
-      telegramId, 
-      fullName, 
-      phoneNumber, 
-      selectedNumbers, 
-      isQuickPick, 
-      ticketCount, 
-      totalPrice, 
-      senderAccount 
-    } = req.body;
-
-    const parsedNumbers = selectedNumbers ? JSON.parse(selectedNumbers) : [];
-    const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
-    const orderId = 'swCX' + Math.random().toString(36).substring(2, 8) + 'JT';
-
-    const newTicket = new Ticket({
-      orderId, 
-      lotteryId, 
-      telegramId: String(telegramId), 
-      fullName,
-      phoneNumber: phoneNumber || '+251900000000',
-      selectedNumbers: parsedNumbers, 
-      isQuickPick: isQuickPick === 'true',
-      ticketCount: Number(ticketCount), 
-      totalPrice: Number(totalPrice),
-      senderAccount, 
-      receiptUrl, 
-      status: 'PENDING REVIEW'
-    });
-
-    await newTicket.save();
-
-    // 🔔 INSTANT ADMIN NOTIFICATION TO YOUR TELEGRAM ACCOUNT
-    try {
-      const adminMessage = 
-        `🚨 *NEW TICKET ORDER RECEIVED!*\n\n` +
-        `🆔 *Order ID:* \`${orderId}\`\n` +
-        `👤 *Name:* ${fullName || 'N/A'}\n` +
-        `📞 *Phone:* \`${phoneNumber || 'N/A'}\`\n` +
-        `🎟️ *Tickets Count:* ${ticketCount}\n` +
-        `🔢 *Numbers:* ${parsedNumbers.length > 0 ? parsedNumbers.join(', ') : 'Quick Pick'}\n` +
-        `💵 *Total Price:* ${totalPrice} Birr\n` +
-        `💳 *Sender Account:* \`${senderAccount || 'N/A'}\`\n\n` +
-        `📌 _Open your Admin Dashboard to approve or reject this order._`;
-
-      const adminId = String(ADMIN_TELEGRAM_ID).trim();
-
-      if (receiptUrl) {
-        const fullReceiptUrl = `${req.protocol}://${req.get('host')}${receiptUrl}`;
-        await bot.api.sendPhoto(adminId, fullReceiptUrl, {
-          caption: adminMessage,
-          parse_mode: 'Markdown'
-        });
-      } else {
-        await bot.api.sendMessage(adminId, adminMessage, {
-          parse_mode: 'Markdown'
-        });
-      }
-    } catch (notifErr) {
-      console.error('⚠️ Failed to send admin notification:', notifErr.message);
-    }
-
-    res.status(201).json({ success: true, orderId, ticket: newTicket });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-app.get('/api/tickets/user-tickets', async (req, res) => {
-  try {
-    const { phoneNumber, telegramId } = req.query;
-    const keyQuery = {};
-    if (phoneNumber) keyQuery.phoneNumber = phoneNumber;
-    if (telegramId) keyQuery.telegramId = String(telegramId);
-    const tickets = await Ticket.find(keyQuery).populate('lotteryId').sort({ createdAt: -1 });
-    res.json({ success: true, tickets });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+// Use modular ticket routes or keep them here cleanly without duplicates
+app.use('/api/tickets', ticketRoutes);
 
 const PORT = process.env.PORT || 5000;
 mongoose.connect(process.env.MONGO_URI).then(() => {
