@@ -107,7 +107,6 @@ bot.command('start', async (ctx) => {
   }
 });
 
-const processedUpdates = new Set();
 let isBroadcasting = false;
 
 async function executeBroadcast(imageUrl, broadcastText) {
@@ -144,31 +143,29 @@ async function executeBroadcast(imageUrl, broadcastText) {
 bot.on('message:text', async (ctx, next) => {
   const text = ctx.message.text || '';
   if (text.toLowerCase().startsWith('/post')) {
-    const updateId = ctx.update.update_id;
-    const msgId = ctx.message.message_id;
-    const lockKey = `${updateId}-${msgId}`;
+    const senderId = String(ctx.from.id).trim();
+    const adminId = String(ADMIN_TELEGRAM_ID).trim();
 
-    if (processedUpdates.has(lockKey) || isBroadcasting) return;
-    processedUpdates.add(lockKey);
-    setTimeout(() => processedUpdates.delete(lockKey), 120000);
+    if (senderId !== adminId) {
+      await ctx.reply(LOCALES['en'].unauthorized);
+      return;
+    }
+
+    const broadcastText = text.replace(/^\/post\s*/i, '').trim();
+    if (!broadcastText) {
+      await ctx.reply(LOCALES['en'].broadcastUsage, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    if (isBroadcasting) {
+      await ctx.reply('⚠️ A broadcast is already in progress. Please wait.');
+      return;
+    }
 
     try {
-      const senderId = String(ctx.from.id).trim();
-      const adminId = String(ADMIN_TELEGRAM_ID).trim();
-
-      if (senderId !== adminId) {
-        await ctx.reply(LOCALES['en'].unauthorized);
-        return;
-      }
-
-      const broadcastText = text.replace(/^\/post\s*/i, '').trim();
-      if (!broadcastText) {
-        await ctx.reply(LOCALES['en'].broadcastUsage, { parse_mode: 'Markdown' });
-        return;
-      }
-
       isBroadcasting = true;
       await ctx.reply(LOCALES['en'].broadcasting);
+      
       const { successCount, failCount } = await executeBroadcast(null, broadcastText);
 
       await ctx.reply(
@@ -177,14 +174,13 @@ bot.on('message:text', async (ctx, next) => {
           .replace('{fail}', failCount),
         { parse_mode: 'Markdown' }
       );
-      return;
     } catch (error) {
       console.error('Error handling broadcast text:', error);
       await ctx.reply('❌ An error occurred while sending the broadcast.');
-      return;
     } finally {
       isBroadcasting = false;
     }
+    return;
   }
   return next();
 });
@@ -303,11 +299,10 @@ app.get('/api/lotteries', async (req, res) => {
   }
 });
 
-// 🚗 ADD NEW CAR: AUTOMATICALLY WIPES OLD CARS & TICKETS FOR A FRESH 0 SOLD SLATE
 app.post('/api/lotteries', async (req, res) => {
   try {
-    await Lottery.deleteMany({}); // Wipe previous cars
-    await Ticket.deleteMany({});  // Wipe previous tickets
+    await Lottery.deleteMany({});
+    await Ticket.deleteMany({});
 
     const lotteryData = { 
       title: req.body.title,
@@ -397,12 +392,20 @@ app.patch('/api/admin/tickets/:orderId/reject', async (req, res) => {
 
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
+    if (isBroadcasting) {
+      return res.status(429).json({ success: false, message: 'A broadcast is already in progress. Please wait.' });
+    }
+
     const { message, imageUrl } = req.body;
     if (!message) return res.status(400).json({ success: false, message: 'Message content is required' });
 
+    isBroadcasting = true;
     const { successCount, failCount } = await executeBroadcast(imageUrl, message);
+    isBroadcasting = false;
+
     res.json({ success: true, message: `Broadcast complete! Successfully sent: ${successCount}, Failed: ${failCount}` });
   } catch (error) {
+    isBroadcasting = false;
     res.status(500).json({ success: false, message: error.message });
   }
 });
